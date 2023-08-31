@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -9,8 +10,38 @@ namespace BarelyFunctional.VerletPhysics
 { 
     public class BFVerletPhysicsMaster : MonoBehaviour
     {
+        [SerializeField]
+        double3 gravity;
+        [SerializeField]
+        float simDt;
 
-        
+        VerletPhysicsSimulator simulator;
+        VerletPhysicsWorld world;
+
+        private void Start()
+        {
+            StartCoroutine(RunPhysics());
+        }
+
+        private void OnDestroy()
+        {
+            world.Dispose();
+        }
+
+        IEnumerator RunPhysics()
+        {
+            world = new VerletPhysicsWorld(gravity);
+            simulator = new VerletPhysicsSimulator();
+            while (true)
+            {
+                world.worldGravity = gravity;
+                simulator.dt = (double)simDt;
+                JobHandle handle = simulator.Schedule(world.ParticleCount, 64);
+                yield return new WaitUntil(() => handle.IsCompleted);
+                yield return new WaitForSeconds(simDt);
+            }
+        }
+
     }
 
     // https://en.wikipedia.org/wiki/Verlet_integration
@@ -52,34 +83,64 @@ namespace BarelyFunctional.VerletPhysics
         }
     }
 
-    public struct VerletPhysicsSimulator : System.IDisposable, IJobParallelFor
+    public struct VerletPhysicsWorld : System.IDisposable
     {
-        public double3 worldGravity;
-        public float dt;
-
         NativeList<VerletParticle> particles;
+        public double3 worldGravity;
+        bool isCreated;
 
-        public VerletPhysicsSimulator(float3 g)
+        public bool IsCreated
+        {
+            get { return isCreated; }
+        }
+
+        public VerletPhysicsWorld(double3 g)
         {
             particles = new NativeList<VerletParticle>(Allocator.Persistent);
             worldGravity = g;
-            dt = 0;
+            isCreated = true;
+        }
+
+        public int ParticleCount
+        {
+            get
+            {
+                return particles.IsCreated ? particles.Length : 0;
+            }
+        }
+
+        public VerletParticle GetParticle(int i)
+        {
+            return particles[i];
+        }
+
+        public void SetParticle(int i, VerletParticle p)
+        {
+            particles[i] = p;
         }
 
         public void Dispose()
         {
             if (particles.IsCreated) particles.Dispose();
+            isCreated = false;
         }
+    }
+
+    [BurstCompile]
+    public struct VerletPhysicsSimulator : IJobParallelFor
+    {
+        [ReadOnly] public double dt;
+        public VerletPhysicsWorld world;
 
         public void Execute(int index)
         {
-            if (!particles.IsCreated) return;
-            if (index >= particles.Length) return;
+            if (!world.IsCreated) return;
+            if (index >= world.ParticleCount) return;
 
-            VerletParticle particle = particles[index];
-            particle.acc += worldGravity;
+            VerletParticle particle = world.GetParticle(index);
+            particle.acc += world.worldGravity;
             particle.update(dt);
-            particles[index] = particle;
+            world.SetParticle(index, particle);
         }
     }
 
