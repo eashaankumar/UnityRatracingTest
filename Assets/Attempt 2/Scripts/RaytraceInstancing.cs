@@ -3,6 +3,7 @@ using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
 using Unity.Mathematics;
 
+// https://github.com/INedelcu/RayTracingMeshInstancingSimple
 namespace BarelyFunctional
 {
     [ExecuteInEditMode]
