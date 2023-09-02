@@ -20,7 +20,8 @@ namespace BarelyFunctional.VerletPhysics
         public int count;
 
         VerletPhysicsSimulator simulatorJob;
-        VerletPhysicsWorld world;
+        VerletPhysicsWorld verletWorld;
+        VoxelWorld voxelWorld;
         VerletPhysicsToRendererConverter physicsToRendererConverterJob;
 
         float lastTick;
@@ -29,12 +30,14 @@ namespace BarelyFunctional.VerletPhysics
 
         private void OnDestroy()
         {
-            world.Dispose();
+            verletWorld.Dispose();
+            voxelWorld.Dispose();
         }
 
         private void Awake()
         {
-            world = new VerletPhysicsWorld(gravity);
+            verletWorld = new VerletPhysicsWorld(gravity, Allocator.Persistent);
+            voxelWorld = new VoxelWorld(Allocator.Persistent);
             simulatorJob = new VerletPhysicsSimulator();
             physicsToRendererConverterJob = new VerletPhysicsToRendererConverter();
             random = new Unity.Mathematics.Random(1224214);
@@ -46,34 +49,66 @@ namespace BarelyFunctional.VerletPhysics
             JobHandle handle;
             if (time - lastTick >= simDt)
             {
-                world.AddParticle(
-                    new VerletParticle 
-                    { 
-                        drag = 0, 
-                        mass = 1.0, 
-                        vel = new double3(UnityEngine.Random.value * 5 * 2 - 1, UnityEngine.Random.value * 10, UnityEngine.Random.value * 5 * 2 - 1) 
+                verletWorld.AddParticle(
+                    new VerletParticle
+                    {
+                        drag = 0,
+                        mass = 1.0,
+                        vel = random.NextDouble3Direction() * 5
                     });
-                world.worldGravity = gravity;
+                voxelWorld.AddVoxel(
+                    new Voxel
+                    (
+                        new Structs.Color(random.NextFloat(), random.NextFloat(), random.NextFloat()),
+                        random.NextFloat()
+                    ));
+                verletWorld.worldGravity = gravity;
                 simulatorJob.dt = simDt;
-                simulatorJob.world = world;
-                handle = simulatorJob.Schedule(world.ParticleCount, 64);
+                simulatorJob.world = verletWorld;
+                handle = simulatorJob.Schedule(verletWorld.ParticleCount, 64);
                 handle.Complete();
             }
 
             // convert to renderer
-            VerletPhysicsRenderer vrenderer = new VerletPhysicsRenderer(world.ParticleCount, Allocator.TempJob);
-            physicsToRendererConverterJob.world = world;
+            VerletPhysicsRenderer vrenderer = new VerletPhysicsRenderer(verletWorld.ParticleCount, Allocator.TempJob);
+            physicsToRendererConverterJob.verletWorld = verletWorld;
+            physicsToRendererConverterJob.voxelWorld = voxelWorld;
             physicsToRendererConverterJob.renderer = vrenderer;
             physicsToRendererConverterJob.random = random;
-            handle = physicsToRendererConverterJob.Schedule(world.ParticleCount, 64);
+            handle = physicsToRendererConverterJob.Schedule(verletWorld.ParticleCount, 64);
             handle.Complete();
 
-            count = world.ParticleCount;
+            count = verletWorld.ParticleCount;
             lastTick = time;
             // copy data to instanced renderer
             return vrenderer;
         }        
 
+    }
+
+    public struct VoxelWorld : System.IDisposable
+    {
+        NativeList<Voxel> voxels;
+
+        public VoxelWorld(Allocator a)
+        {
+            voxels = new NativeList<Voxel>(a);
+        }
+
+        public void Dispose()
+        {
+            if (voxels.IsCreated) voxels.Dispose();    
+        }
+
+        public Voxel GetVoxel(int i)
+        {
+            return voxels[i];
+        }
+
+        public void AddVoxel(Voxel v)
+        {
+            if(voxels.IsCreated) voxels.Add(v);
+        }
     }
 
     public struct VerletPhysicsWorld : System.IDisposable
@@ -87,9 +122,9 @@ namespace BarelyFunctional.VerletPhysics
             get { return isCreated; }
         }
 
-        public VerletPhysicsWorld(double3 g)
+        public VerletPhysicsWorld(double3 g, Allocator a)
         {
-            particles = new NativeList<VerletParticle>(Allocator.Persistent);
+            particles = new NativeList<VerletParticle>(a);
             worldGravity = g;
             isCreated = true;
         }
@@ -146,18 +181,21 @@ namespace BarelyFunctional.VerletPhysics
     [BurstCompile]
     public struct VerletPhysicsToRendererConverter : IJobParallelFor
     {
-        [ReadOnly] public VerletPhysicsWorld world;
+        [ReadOnly] public VerletPhysicsWorld verletWorld;
+        [ReadOnly] public VoxelWorld voxelWorld;
         [ReadOnly] public Unity.Mathematics.Random random;
         public VerletPhysicsRenderer renderer;
 
         public void Execute(int index)
         {
-            renderer.data[index] = new Data() 
-            { 
-                color = new float3(random.NextFloat(0f, 1f), random.NextFloat(0f, 1f), random.NextFloat(0f, 1f)), emission = random.NextFloat(0f, 1f) 
+            Voxel v = voxelWorld.GetVoxel(index);
+            renderer.data[index] = new Data()
+            {
+                color = v.color.Float3(),
+                emission = v.glow / 255f, 
             };
 
-            VerletParticle p = world.GetParticle(index);
+            VerletParticle p = verletWorld.GetParticle(index);
             float3 pos = new float3((float)p.pos.x, (float)p.pos.y, (float)p.pos.z);
             renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1));
         }

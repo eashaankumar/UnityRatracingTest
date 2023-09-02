@@ -2,6 +2,7 @@ using BarelyFunctional.Interfaces;
 using BarelyFunctional.Structs;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -68,6 +69,35 @@ namespace BarelyFunctional.Structs
         {
             if (data.IsCreated) data.Dispose();
             if (matrices.IsCreated) matrices.Dispose();
+        }
+    }
+
+    public struct Color
+    {
+        public byte r, g, b;
+
+        public Color (float _r, float _g, float _b)
+        {
+            r = (byte)(_r * 255);
+            g = (byte)(_g * 255);
+            b = (byte)(_b * 255);
+        }
+
+        public float3 Float3()
+        {
+            return new float3(r / 255f, g / 255f, b / 255f);
+        }
+    }
+
+    public struct Voxel
+    {
+        public Color color;
+        public byte glow;
+
+        public Voxel(Color _c, float _g)
+        {
+            color = _c;
+            glow = (byte)(_g * 255);
         }
     }
 }
