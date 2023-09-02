@@ -23,11 +23,12 @@ namespace BarelyFunctional.VerletPhysics
 
         public int count;
 
-        VerletPhysicsSimulator simulatorJob;
+        VerletPhysicsSimulatorJob simulatorJob;
         VerletPhysicsWorld verletWorld;
         VoxelWorld voxelWorld;
-        VerletPhysicsToRendererConverter physicsToRendererConverterJob;
-        VerletPhysicsHasher verletPhysicsHasher;
+        VerletPhysicsToRendererConverterJob physicsToRendererConverterJob;
+        VerletPhysicsHasherJob verletPhysicsHasher;
+        VerletPhysicsCollisionsJob verletPhysicsCollisions;
         float lastTick;
 
         Unity.Mathematics.Random random;
@@ -42,16 +43,16 @@ namespace BarelyFunctional.VerletPhysics
         {
             verletWorld = new VerletPhysicsWorld(gravity, Allocator.Persistent);
             voxelWorld = new VoxelWorld(Allocator.Persistent);
-            simulatorJob = new VerletPhysicsSimulator();
-            verletPhysicsHasher = new VerletPhysicsHasher();
-            physicsToRendererConverterJob = new VerletPhysicsToRendererConverter();
+            simulatorJob = new VerletPhysicsSimulatorJob();
+            verletPhysicsHasher = new VerletPhysicsHasherJob();
+            physicsToRendererConverterJob = new VerletPhysicsToRendererConverterJob();
+            verletPhysicsCollisions = new VerletPhysicsCollisionsJob();
             random = new Unity.Mathematics.Random(1224214);
         }
 
         public VerletPhysicsRenderer Tick()
         {
             float time = Time.time;
-            JobHandle handle;
             if (time - lastTick >= simDt)
             {
                 verletWorld.AddParticle(
@@ -74,13 +75,17 @@ namespace BarelyFunctional.VerletPhysics
                 verletPhysicsHasher.cells = hashGrid.cells.AsParallelWriter();
                 verletPhysicsHasher.cellSize = cellSize;
                 verletPhysicsHasher.Schedule(verletWorld.ParticleCount, 64).Complete();
+                // collisions
+                verletPhysicsCollisions.grid = hashGrid;
+                verletPhysicsCollisions.cellSize = cellSize;
+                verletPhysicsCollisions.world = verletWorld;
+                verletPhysicsCollisions.subSteps = subSteps;
+                verletPhysicsCollisions.Schedule(verletWorld.ParticleCount, 64).Complete();
                 // tick physics
                 verletWorld.worldGravity = gravity;
                 simulatorJob.dt = simDt;
-                simulatorJob.subSteps = subSteps;
                 simulatorJob.world = verletWorld;
-                handle = simulatorJob.Schedule(verletWorld.ParticleCount, 64);
-                handle.Complete();
+                simulatorJob.Schedule(verletWorld.ParticleCount, 64).Complete();
                 hashGrid.Dispose();
             }
 
@@ -90,8 +95,7 @@ namespace BarelyFunctional.VerletPhysics
             physicsToRendererConverterJob.voxelWorld = voxelWorld;
             physicsToRendererConverterJob.renderer = vrenderer;
             physicsToRendererConverterJob.random = random;
-            handle = physicsToRendererConverterJob.Schedule(verletWorld.ParticleCount, 64);
-            handle.Complete();
+            physicsToRendererConverterJob.Schedule(verletWorld.ParticleCount, 64).Complete();
 
             count = verletWorld.ParticleCount;
             lastTick = time;
@@ -177,13 +181,13 @@ namespace BarelyFunctional.VerletPhysics
 
     public struct VerletPhysicsHashGrid : System.IDisposable
     {
-        public NativeMultiHashMap<int3, VerletParticle> cells;
+        public NativeMultiHashMap<int3, int> cells;
         Allocator allocator;
 
         public VerletPhysicsHashGrid(int maxCapacity, Allocator a)
         {
             allocator = a;
-            cells = new NativeMultiHashMap<int3, VerletParticle>(maxCapacity, a);
+            cells = new NativeMultiHashMap<int3, int>(maxCapacity, a);
         }
 
         public void Dispose()
@@ -201,45 +205,113 @@ namespace BarelyFunctional.VerletPhysics
     }
 
     [BurstCompile]
-    public struct VerletPhysicsHasher : IJobParallelFor
+    public struct VerletPhysicsHasherJob : IJobParallelFor
     {
         [ReadOnly] public VerletPhysicsWorld world;
         [ReadOnly] public double cellSize;
-        public NativeMultiHashMap<int3, VerletParticle>.ParallelWriter cells;
+        public NativeMultiHashMap<int3, int>.ParallelWriter cells;
         public void Execute(int i)
         {
             //for (int i = 0; i < world.ParticleCount; i++)
             {
                 VerletParticle p = world.GetParticle(i);
                 int3 hash = p.Hash(cellSize);
-                cells.Add(hash, world.GetParticle(i));
+                cells.Add(hash, i);
             }
         }
     }
 
     [BurstCompile]
-    public struct VerletPhysicsSimulator : IJobParallelFor
+    public struct VerletPhysicsCollisionsJob : IJobParallelFor
     {
-        [ReadOnly] public double dt;
         [ReadOnly] public int subSteps;
+        [ReadOnly] public double cellSize;
+        [ReadOnly] public VerletPhysicsHashGrid grid;
         [NativeDisableParallelForRestriction] public VerletPhysicsWorld world;
 
         public void Execute(int index)
         {
-            //if (!world.IsCreated) return;
-            //if (index >= world.ParticleCount) return;
+            //VerletParticle particle = world.GetParticle(index);
             double substepRat = 1.0 / subSteps;
             VerletParticle particle = world.GetParticle(index);
-            for (int substep = 0; substep < subSteps; substep++)
+            int3 cell = particle.Hash(cellSize);
+            int checkSize = (int)math.ceil(particle.radius / cellSize) * 2;
+            NativeList<VerletParticle> neighbors = Neighbors(cell, checkSize, index);
+            //int3 size = new int3(1, 1, 1) * particle.radius;
+            for (int s = 0; s < subSteps; s++)
             {
-                particle.update(dt * substepRat, world.worldGravity);
+                particle = CheckCollision(particle, index, neighbors, substepRat);
             }
+
+            world.SetParticle(index, particle);
+            neighbors.Dispose();
+        }
+
+        /// <summary>
+        /// Pre Condition: neighbors does not contain p
+        /// </summary>
+        /// <param name="p"></param>
+        /// <param name="pid"></param>
+        /// <param name="neighbors"></param>
+        /// <param name="substepRatio"></param>
+        /// <returns></returns>
+        VerletParticle CheckCollision(VerletParticle p, int pid, NativeList<VerletParticle> neighbors, double substepRatio)
+        {
+            foreach(VerletParticle n in neighbors)
+            {
+                double3 vecToN = n.pos - p.pos;
+                double disSq = math.lengthsq(vecToN);
+                double leastDis = p.radius + n.radius;
+                if (disSq < leastDis * leastDis)
+                {
+                    double3 offset = -vecToN / disSq / disSq * 0.0001 * substepRatio;
+                    p.pos += offset;
+                }
+            }
+            return p;
+        }
+
+        NativeList<VerletParticle> Neighbors(int3 cell, int3 checkSize, int pid)
+        {
+            NativeList<VerletParticle> result = new NativeList<VerletParticle>(Allocator.Temp);
+            for(int x = -checkSize.x/2; x <= checkSize.x/2; x++)
+            {
+                for (int y = -checkSize.y / 2; y <= checkSize.y / 2; y++)
+                {
+                    for (int z = -checkSize.z / 2; z <= checkSize.z / 2; z++)
+                    {
+                        int3 current = cell + new int3(x, y, z);
+                        if (grid.cells.ContainsKey(current))
+                        {
+                            foreach (var item in grid.cells.GetValuesForKey(current))
+                            {
+                                if (pid == item) continue;
+                                result.Add(world.GetParticle(item));
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+    }
+
+    [BurstCompile]
+    public struct VerletPhysicsSimulatorJob : IJobParallelFor
+    {
+        [ReadOnly] public double dt;
+        [NativeDisableParallelForRestriction] public VerletPhysicsWorld world;
+
+        public void Execute(int index)
+        {
+            VerletParticle particle = world.GetParticle(index);
+            particle.update(dt, world.worldGravity);
             world.SetParticle(index, particle);
         }
     }
 
     [BurstCompile]
-    public struct VerletPhysicsToRendererConverter : IJobParallelFor
+    public struct VerletPhysicsToRendererConverterJob : IJobParallelFor
     {
         [ReadOnly] public VerletPhysicsWorld verletWorld;
         [ReadOnly] public VoxelWorld voxelWorld;
