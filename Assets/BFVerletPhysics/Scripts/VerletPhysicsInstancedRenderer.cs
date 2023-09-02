@@ -3,12 +3,15 @@ using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
 using Unity.Mathematics;
 using Unity.Collections;
+using BarelyFunctional.Structs;
+using BarelyFunctional.Interfaces;
+using BarelyFunctional.AbstractClasses;
 
 // https://github.com/INedelcu/RayTracingMeshInstancingSimple
 namespace BarelyFunctional.Renderer
 {
     [ExecuteInEditMode]
-    public class RaytraceInstancing : MonoBehaviour
+    public class VerletPhysicsInstancedRenderer : VerletPhysicsParticleRenderer
     {
         public RayTracingShader rayTracingShader = null;
 
@@ -101,8 +104,9 @@ namespace BarelyFunctional.Renderer
             }
         }
 
-        void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
             ReleaseResources();
         }
 
@@ -127,12 +131,7 @@ namespace BarelyFunctional.Renderer
                 convergenceStep = 0;
         }
 
-        struct Data
-        {
-            public float3 color;
-            public float emission;
-        };
-
+       
         [ImageEffectOpaque]
         void OnRenderImage(RenderTexture src, RenderTexture dest)
         {
@@ -140,8 +139,10 @@ namespace BarelyFunctional.Renderer
             {
                 Debug.Log("The RayTracing API is not supported by this GPU or by the current graphics API.");
                 Graphics.Blit(src, dest);
-                return;
+                return; 
             }
+
+            if (!vRenderer.data.IsCreated) return;
 
             if (rayTracingAccelerationStructure == null)
                 return;
@@ -160,9 +161,15 @@ namespace BarelyFunctional.Renderer
             rayTracingAccelerationStructure.ClearInstances();
 
             #region Instancing
+
+            /*vRenderer = new VerletPhysicsRenderer(2);
+            vRenderer.data[0] = new Data { color = new float3(1, 0, 0), emission = Mathf.Sin(Time.time) * 0.5f + 0.5f };
+            vRenderer.data[1] = new Data { color = new float3(1, 1, 0), emission = Mathf.Cos(Time.time) * 0.5f + 0.5f };
+            vRenderer.matrices[0] = float4x4.TRS(target.position, target.rotation, target.localScale);
+            vRenderer.matrices[1] = float4x4.TRS(target.position + target.forward * 2, target.rotation, target.localScale);*/
+
             GraphicsBuffer data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 2, 4 * sizeof(float));
-            data.SetData(new Data[] { new Data { color=new float3(1, 0, 0), emission=Mathf.Sin(Time.time) * 0.5f + 0.5f }, 
-                                      new Data { color=new float3(1, 1, 0), emission=Mathf.Cos(Time.time) * 0.5f + 0.5f} });
+            data.SetData(vRenderer.data);
 
             RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);
 
@@ -170,16 +177,7 @@ namespace BarelyFunctional.Renderer
             config.materialProperties.SetBuffer("g_Data", data);
             config.material.enableInstancing = true;
 
-            /*float4x4 matrix1 = float4x4.TRS(target.position, target.rotation, target.localScale);
-            rayTracingAccelerationStructure.AddInstance(config, matrix1, null, (uint)0);
-            float4x4 matrix2 = float4x4.TRS(target.position + target.forward * 2, target.rotation, target.localScale);
-            rayTracingAccelerationStructure.AddInstance(config, matrix2, null, (uint)1);*/
-
-            NativeArray<Matrix4x4> matrices = new NativeArray<Matrix4x4>(2, Allocator.Temp);
-            matrices[0] = Matrix4x4.TRS(target.position, target.rotation, target.localScale);
-            matrices[1] = Matrix4x4.TRS(target.position + target.forward * 2, target.rotation, target.localScale);
-
-            rayTracingAccelerationStructure.AddInstances(config, matrices);
+            rayTracingAccelerationStructure.AddInstances(config, vRenderer.matrices);
             #endregion
 
             // Not really needed per frame if the scene is static.
@@ -212,7 +210,6 @@ namespace BarelyFunctional.Renderer
             prevBounceCountTransparent = bounceCountTransparent;
 
             data.Release();
-            matrices.Dispose();
         }
     }
 }
