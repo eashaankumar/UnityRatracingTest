@@ -264,7 +264,7 @@ MonoBehaviour:
     z: 0
   simDt: 0.01
   subSteps: 5
-  cellSize: 5
+  cellSize: 3.130000114440918
   count: 0
 --- !u!1 &1555959819
 GameObject:

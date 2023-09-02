@@ -13,48 +13,59 @@ namespace BarelyFunctional.Structs
     [System.Serializable]
     public struct VerletParticle
     {
-        public double3 pos;
-        public double3 vel;
+        public double3 pos_current;
+        public double3 pos_old;
         public double3 acc;
         public double radius;
 
         public double mass; // 1kg
         public double drag; // rho*C*Area – simplified drag for this example
+        public bool freeze;
 
-        public VerletParticle(double _mass, double _drag, double _r)
+        public VerletParticle(double _mass, double _drag, double _r, bool _freeze)
         {
-            this.pos = 0;
-            this.vel = 0;
+            this.pos_current = 0;
+            this.pos_old = 0;
             this.acc = 0;
             this.mass = _mass;
             this.drag = _drag;
             this.radius = _r;
+            this.freeze = _freeze;
         }
 
-        public void update(double dt, double3 gravityAcc)
+        public void update(double dt)
         {
-            double3 new_pos = pos + vel * dt + acc * (dt * dt * 0.5);
+            /*double3 new_pos = pos + vel * dt + acc * (dt * dt * 0.5);
             double3 new_acc = gravityAcc + dragAcc();
             double3 new_vel = vel + (acc + new_acc) * (dt * 0.5);
             pos = new_pos;
             vel = new_vel;
-            acc = new_acc;
+            acc = new_acc;*/
+            double3 vel = pos_current - pos_old;
+            pos_old = pos_current;
+            pos_current = pos_current + vel + acc * dt * dt;
+            acc = 0;
         }
 
-        double3 dragAcc()
+        public void accelerate(double3 externalAcc)
+        {
+            acc += externalAcc;
+        }
+
+        /*double3 dragAcc()
         {
             // double3 grav_acc = new double3 ( 0.0, 0.0, -9.81 ); // 9.81 m/s² down in the z-axis
             double3 drag_force = 0.5 * drag * (vel * vel); // D = 0.5 * (rho * C * Area * vel^2)
             double3 drag_acc = drag_force / mass; // a = F/m
-            return /*grav_acc*/ -drag_acc;
-        }
+            return /*grav_acc*/ /*-drag_acc;
+        }*/
 
         public int3 Hash(double cellSize)
         {
             return new int3(
-                (int)math.floor(pos.x / cellSize),
-                (int)math.floor(pos.y / cellSize),
-                (int)math.floor(pos.z / cellSize)
+                (int)math.floor(pos_current.x / cellSize),
+                (int)math.floor(pos_current.y / cellSize),
+                (int)math.floor(pos_current.z / cellSize)
                 );
         }
     }

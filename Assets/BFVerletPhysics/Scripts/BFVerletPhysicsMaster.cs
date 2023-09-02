@@ -23,7 +23,7 @@ namespace BarelyFunctional.VerletPhysics
 
         public int count;
 
-        VerletPhysicsSimulatorJob simulatorJob;
+        //VerletPhysicsSimulatorJob simulatorJob;
         VerletPhysicsWorld verletWorld;
         VoxelWorld voxelWorld;
         VerletPhysicsToRendererConverterJob physicsToRendererConverterJob;
@@ -43,11 +43,39 @@ namespace BarelyFunctional.VerletPhysics
         {
             verletWorld = new VerletPhysicsWorld(gravity, Allocator.Persistent);
             voxelWorld = new VoxelWorld(Allocator.Persistent);
-            simulatorJob = new VerletPhysicsSimulatorJob();
+            //simulatorJob = new VerletPhysicsSimulatorJob();
             verletPhysicsHasher = new VerletPhysicsHasherJob();
             physicsToRendererConverterJob = new VerletPhysicsToRendererConverterJob();
             verletPhysicsCollisions = new VerletPhysicsCollisionsJob();
             random = new Unity.Mathematics.Random(1224214);
+
+            BuildGround();
+        }
+
+        void BuildGround()
+        {
+            int2 size = new int2(10, 10);
+            for(int x = -size.x/2; x <= size.x/2; x++)
+            {
+                for (int z = -size.y / 2; z <= size.y / 2; z++)
+                {
+                    verletWorld.AddParticle(
+                    new VerletParticle
+                    {
+                        drag = 0,
+                        mass = 1.0,
+                        radius = 1,
+                        pos_current = new double3(x, -10, z) * 1,
+                        freeze = true,
+                    });
+                    voxelWorld.AddVoxel(
+                        new Voxel
+                        (
+                            new Structs.Color(math.abs(x / (size.x / 2f)), 0, 0),
+                            0.1f
+                        ));
+                }
+            }
         }
 
         public VerletPhysicsRenderer Tick()
@@ -55,20 +83,26 @@ namespace BarelyFunctional.VerletPhysics
             float time = Time.time;
             if (time - lastTick >= simDt)
             {
-                verletWorld.AddParticle(
-                    new VerletParticle
-                    {
-                        drag = 0,
-                        mass = 1.0,
-                        vel = random.NextDouble3Direction() * 5,
-                        radius = math.clamp(random.NextDouble(), 0.1, 1),
-                    });
-                voxelWorld.AddVoxel(
-                    new Voxel
-                    (
-                        new Structs.Color(random.NextFloat(), random.NextFloat(), random.NextFloat()),
-                        random.NextFloat()
-                    ));
+                if (random.NextFloat(0f, 1f) < 0.5f)
+                {
+                    double3 pos = math.normalize(random.NextDouble3Direction()) * 1;
+                    verletWorld.AddParticle(
+                        new VerletParticle
+                        {
+                            drag = 0.1,
+                            mass = 1.0,
+                            pos_current = pos,
+                            pos_old = pos,
+                            radius = math.clamp(random.NextDouble(), 0.1, 0.5),
+                        });
+                    voxelWorld.AddVoxel(
+                        new Voxel
+                        (
+                            new Structs.Color(random.NextFloat(), random.NextFloat(), random.NextFloat()),
+                            random.NextFloat()
+                        ));
+                }
+                verletWorld.worldGravity = gravity;
                 // build physics hash grid
                 VerletPhysicsHashGrid hashGrid = new VerletPhysicsHashGrid(100000, Allocator.TempJob);
                 verletPhysicsHasher.world = verletWorld;
@@ -77,15 +111,19 @@ namespace BarelyFunctional.VerletPhysics
                 verletPhysicsHasher.Schedule(verletWorld.ParticleCount, 64).Complete();
                 // collisions
                 verletPhysicsCollisions.grid = hashGrid;
+                verletPhysicsCollisions.dt = simDt;
                 verletPhysicsCollisions.cellSize = cellSize;
                 verletPhysicsCollisions.world = verletWorld;
                 verletPhysicsCollisions.subSteps = subSteps;
                 verletPhysicsCollisions.Schedule(verletWorld.ParticleCount, 64).Complete();
                 // tick physics
-                verletWorld.worldGravity = gravity;
-                simulatorJob.dt = simDt;
-                simulatorJob.world = verletWorld;
-                simulatorJob.Schedule(verletWorld.ParticleCount, 64).Complete();
+                /*VerletPhysicsCollisionsBruteJob physicsJob = new VerletPhysicsCollisionsBruteJob
+                {
+                    world = verletWorld,
+                    simDt = simDt,
+                    subSteps = subSteps
+                };
+                physicsJob.Schedule().Complete();*/
                 hashGrid.Dispose();
             }
 
@@ -226,6 +264,7 @@ namespace BarelyFunctional.VerletPhysics
     {
         [ReadOnly] public int subSteps;
         [ReadOnly] public double cellSize;
+        [ReadOnly] public double dt;
         [ReadOnly] public VerletPhysicsHashGrid grid;
         [NativeDisableParallelForRestriction] public VerletPhysicsWorld world;
 
@@ -234,13 +273,15 @@ namespace BarelyFunctional.VerletPhysics
             //VerletParticle particle = world.GetParticle(index);
             double substepRat = 1.0 / subSteps;
             VerletParticle particle = world.GetParticle(index);
+            if (particle.freeze) return;
             int3 cell = particle.Hash(cellSize);
-            int checkSize = (int)math.ceil(particle.radius / cellSize) * 2;
+            int checkSize = 2;//(int)math.floor(particle.radius / cellSize) * 2;
             NativeList<VerletParticle> neighbors = Neighbors(cell, checkSize, index);
-            //int3 size = new int3(1, 1, 1) * particle.radius;
             for (int s = 0; s < subSteps; s++)
             {
-                particle = CheckCollision(particle, index, neighbors, substepRat);
+                particle.accelerate(world.worldGravity);
+                particle = CheckCollision(particle, neighbors, substepRat);
+                particle.update(dt * substepRat);
             }
 
             world.SetParticle(index, particle);
@@ -255,17 +296,20 @@ namespace BarelyFunctional.VerletPhysics
         /// <param name="neighbors"></param>
         /// <param name="substepRatio"></param>
         /// <returns></returns>
-        VerletParticle CheckCollision(VerletParticle p, int pid, NativeList<VerletParticle> neighbors, double substepRatio)
+        VerletParticle CheckCollision(VerletParticle p, NativeList<VerletParticle> neighbors, double substepRatio)
         {
             foreach(VerletParticle n in neighbors)
             {
-                double3 vecToN = n.pos - p.pos;
-                double disSq = math.lengthsq(vecToN);
+                double3 vecToN = n.pos_current - p.pos_current;
+                double dis = math.length(vecToN);
                 double leastDis = p.radius + n.radius;
-                if (disSq < leastDis * leastDis)
+                if (dis < leastDis)
                 {
-                    double3 offset = -vecToN / disSq / disSq * 0.0001 * substepRatio;
-                    p.pos += offset;
+                    double3 offset = -vecToN / dis * math.abs((leastDis - dis));
+                    if (!n.freeze) offset *= 0.5;
+                    p.pos_current += offset;
+                    //p.vel += -vecToN * substepRatio;
+                    //p.vel = (p.mass * p.vel + n.mass * n.vel - n.mass * n.vel) / p.mass * substepRatio;
                 }
             }
             return p;
@@ -297,16 +341,73 @@ namespace BarelyFunctional.VerletPhysics
     }
 
     [BurstCompile]
-    public struct VerletPhysicsSimulatorJob : IJobParallelFor
+    public struct VerletPhysicsCollisionsBruteJob : IJob
     {
-        [ReadOnly] public double dt;
-        [NativeDisableParallelForRestriction] public VerletPhysicsWorld world;
+        [ReadOnly] public double simDt;
+        [ReadOnly] public int subSteps;
+        public VerletPhysicsWorld world;
 
-        public void Execute(int index)
+        public void Execute()
         {
-            VerletParticle particle = world.GetParticle(index);
-            particle.update(dt, world.worldGravity);
-            world.SetParticle(index, particle);
+            for (int s = 0; s < subSteps; s++)
+            {
+                ApplyGravity();
+                SolveCollisions();
+                UpdatePositions(simDt / subSteps);
+            }
+        }
+
+        void ApplyGravity()
+        {
+            for(int i = 0; i < world.ParticleCount; i++)
+            {
+                VerletParticle p = world.GetParticle(i);
+                if (p.freeze) continue;
+                p.accelerate(world.worldGravity);
+                world.SetParticle(i, p);
+            }
+        }
+
+        void UpdatePositions(double dt)
+        {
+            for (int i = 0; i < world.ParticleCount; i++)
+            {
+                VerletParticle p = world.GetParticle(i);
+                if (p.freeze) continue;
+                p.update(dt);
+                world.SetParticle(i, p);
+            }
+        }
+
+        void SolveCollisions()
+        {
+            for (int i = 0; i < world.ParticleCount; i++)
+            {
+                VerletParticle a = world.GetParticle(i);
+                for (int j = 0; j < world.ParticleCount; j++)
+                {
+                    if (i == j) continue;
+                    VerletParticle b = world.GetParticle(j);
+
+                    double3 collision_axis = a.pos_current - b.pos_current;
+                    double dist = math.length(collision_axis);
+                    double minSep = a.radius + b.radius;
+
+                    if (dist < minSep)
+                    {
+                        double3 n = collision_axis / dist;
+                        double delta = minSep - dist;
+                        double mult = 0.5;
+                        if (!a.freeze)
+                            a.pos_current += mult * delta * n;
+                        if (!b.freeze)
+                            b.pos_current -= mult * delta * n;
+                    }
+
+                    world.SetParticle(j, b);
+                }
+                world.SetParticle(i, a);
+            }
         }
     }
 
@@ -328,10 +429,10 @@ namespace BarelyFunctional.VerletPhysics
             };
 
             VerletParticle p = verletWorld.GetParticle(index);
-            float3 pos = new float3((float)p.pos.x, (float)p.pos.y, (float)p.pos.z);
+            float3 pos = new float3((float)p.pos_current.x, (float)p.pos_current.y, (float)p.pos_current.z);
 
             // TODO: voxel size should come from Voxel struct, not verlet object
-            renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1) * (float)p.radius);
+            renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1) * (float)p.radius * 2);
         }
     }
 

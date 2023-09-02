@@ -10,7 +10,6 @@ using BarelyFunctional.VerletPhysics;
 // https://github.com/INedelcu/RayTracingMeshInstancingSimple
 namespace BarelyFunctional.Renderer
 {
-    [ExecuteInEditMode]
     public class VerletPhysicsInstancedRenderer : MonoBehaviour
     {
         [SerializeField]
