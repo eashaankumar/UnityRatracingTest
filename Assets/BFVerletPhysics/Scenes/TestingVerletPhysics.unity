@@ -263,6 +263,8 @@ MonoBehaviour:
     y: -5
     z: 0
   simDt: 0.01
+  subSteps: 5
+  cellSize: 5
   count: 0
 --- !u!1 &1555959819
 GameObject:

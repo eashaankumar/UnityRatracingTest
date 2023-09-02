@@ -16,17 +16,19 @@ namespace BarelyFunctional.Structs
         public double3 pos;
         public double3 vel;
         public double3 acc;
+        public double radius;
 
         public double mass; // 1kg
         public double drag; // rho*C*Area – simplified drag for this example
 
-        public VerletParticle(double _mass, double _drag)
+        public VerletParticle(double _mass, double _drag, double _r)
         {
             this.pos = 0;
             this.vel = 0;
             this.acc = 0;
             this.mass = _mass;
             this.drag = _drag;
+            this.radius = _r;
         }
 
         public void update(double dt, double3 gravityAcc)
@@ -45,6 +47,15 @@ namespace BarelyFunctional.Structs
             double3 drag_force = 0.5 * drag * (vel * vel); // D = 0.5 * (rho * C * Area * vel^2)
             double3 drag_acc = drag_force / mass; // a = F/m
             return /*grav_acc*/ -drag_acc;
+        }
+
+        public int3 Hash(double cellSize)
+        {
+            return new int3(
+                (int)math.floor(pos.x / cellSize),
+                (int)math.floor(pos.y / cellSize),
+                (int)math.floor(pos.z / cellSize)
+                );
         }
     }
 

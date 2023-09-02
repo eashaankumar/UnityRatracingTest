@@ -16,6 +16,10 @@ namespace BarelyFunctional.VerletPhysics
         double3 gravity;
         [SerializeField, Min(0.0001f)]
         double simDt;
+        [SerializeField, Range(1, 100)]
+        int subSteps;
+        [SerializeField, Range(0.1f, 10)]
+        double cellSize;
 
         public int count;
 
@@ -23,7 +27,7 @@ namespace BarelyFunctional.VerletPhysics
         VerletPhysicsWorld verletWorld;
         VoxelWorld voxelWorld;
         VerletPhysicsToRendererConverter physicsToRendererConverterJob;
-
+        VerletPhysicsHasher verletPhysicsHasher;
         float lastTick;
 
         Unity.Mathematics.Random random;
@@ -39,6 +43,7 @@ namespace BarelyFunctional.VerletPhysics
             verletWorld = new VerletPhysicsWorld(gravity, Allocator.Persistent);
             voxelWorld = new VoxelWorld(Allocator.Persistent);
             simulatorJob = new VerletPhysicsSimulator();
+            verletPhysicsHasher = new VerletPhysicsHasher();
             physicsToRendererConverterJob = new VerletPhysicsToRendererConverter();
             random = new Unity.Mathematics.Random(1224214);
         }
@@ -54,7 +59,8 @@ namespace BarelyFunctional.VerletPhysics
                     {
                         drag = 0,
                         mass = 1.0,
-                        vel = random.NextDouble3Direction() * 5
+                        vel = random.NextDouble3Direction() * 5,
+                        radius = math.clamp(random.NextDouble(), 0.1, 1),
                     });
                 voxelWorld.AddVoxel(
                     new Voxel
@@ -62,11 +68,20 @@ namespace BarelyFunctional.VerletPhysics
                         new Structs.Color(random.NextFloat(), random.NextFloat(), random.NextFloat()),
                         random.NextFloat()
                     ));
+                // build physics hash grid
+                VerletPhysicsHashGrid hashGrid = new VerletPhysicsHashGrid(100000, Allocator.TempJob);
+                verletPhysicsHasher.world = verletWorld;
+                verletPhysicsHasher.cells = hashGrid.cells.AsParallelWriter();
+                verletPhysicsHasher.cellSize = cellSize;
+                verletPhysicsHasher.Schedule(verletWorld.ParticleCount, 64).Complete();
+                // tick physics
                 verletWorld.worldGravity = gravity;
                 simulatorJob.dt = simDt;
+                simulatorJob.subSteps = subSteps;
                 simulatorJob.world = verletWorld;
                 handle = simulatorJob.Schedule(verletWorld.ParticleCount, 64);
                 handle.Complete();
+                hashGrid.Dispose();
             }
 
             // convert to renderer
@@ -160,20 +175,65 @@ namespace BarelyFunctional.VerletPhysics
         }
     }
 
+    public struct VerletPhysicsHashGrid : System.IDisposable
+    {
+        public NativeMultiHashMap<int3, VerletParticle> cells;
+        Allocator allocator;
+
+        public VerletPhysicsHashGrid(int maxCapacity, Allocator a)
+        {
+            allocator = a;
+            cells = new NativeMultiHashMap<int3, VerletParticle>(maxCapacity, a);
+        }
+
+        public void Dispose()
+        {
+            if (cells.IsCreated)
+            {
+                cells.Dispose();
+            }
+        }
+
+        public NativeArray<int3> Hashes(Allocator a)
+        {
+            return cells.GetKeyArray(a);
+        }
+    }
+
+    [BurstCompile]
+    public struct VerletPhysicsHasher : IJobParallelFor
+    {
+        [ReadOnly] public VerletPhysicsWorld world;
+        [ReadOnly] public double cellSize;
+        public NativeMultiHashMap<int3, VerletParticle>.ParallelWriter cells;
+        public void Execute(int i)
+        {
+            //for (int i = 0; i < world.ParticleCount; i++)
+            {
+                VerletParticle p = world.GetParticle(i);
+                int3 hash = p.Hash(cellSize);
+                cells.Add(hash, world.GetParticle(i));
+            }
+        }
+    }
+
     [BurstCompile]
     public struct VerletPhysicsSimulator : IJobParallelFor
     {
         [ReadOnly] public double dt;
+        [ReadOnly] public int subSteps;
         [NativeDisableParallelForRestriction] public VerletPhysicsWorld world;
 
         public void Execute(int index)
         {
             //if (!world.IsCreated) return;
             //if (index >= world.ParticleCount) return;
-
+            double substepRat = 1.0 / subSteps;
             VerletParticle particle = world.GetParticle(index);
-            //particle.acc += world.worldGravity;
-            particle.update(dt, world.worldGravity);
+            for (int substep = 0; substep < subSteps; substep++)
+            {
+                particle.update(dt * substepRat, world.worldGravity);
+            }
             world.SetParticle(index, particle);
         }
     }
@@ -197,7 +257,9 @@ namespace BarelyFunctional.VerletPhysics
 
             VerletParticle p = verletWorld.GetParticle(index);
             float3 pos = new float3((float)p.pos.x, (float)p.pos.y, (float)p.pos.z);
-            renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1));
+
+            // TODO: voxel size should come from Voxel struct, not verlet object
+            renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1) * (float)p.radius);
         }
     }
 
