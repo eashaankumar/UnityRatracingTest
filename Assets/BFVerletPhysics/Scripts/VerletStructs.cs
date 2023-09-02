@@ -28,17 +28,17 @@ namespace BarelyFunctional.Structs
             this.drag = _drag;
         }
 
-        public void update(double dt)
+        public void update(double dt, double3 gravityAcc)
         {
             double3 new_pos = pos + vel * dt + acc * (dt * dt * 0.5);
-            double3 new_acc = dragForces(); // only needed if acceleration is not constant
+            double3 new_acc = gravityAcc + dragAcc();
             double3 new_vel = vel + (acc + new_acc) * (dt * 0.5);
             pos = new_pos;
             vel = new_vel;
             acc = new_acc;
         }
 
-        double3 dragForces()
+        double3 dragAcc()
         {
             // double3 grav_acc = new double3 ( 0.0, 0.0, -9.81 ); // 9.81 m/s² down in the z-axis
             double3 drag_force = 0.5 * drag * (vel * vel); // D = 0.5 * (rho * C * Area * vel^2)
@@ -58,24 +58,16 @@ namespace BarelyFunctional.Structs
         public NativeArray<Data> data;
         public NativeArray<Matrix4x4> matrices;
 
-        public VerletPhysicsRenderer(int count)
+        public VerletPhysicsRenderer(int count, Allocator alloc)
         {
-            data = new NativeArray<Data>(count, Allocator.Persistent);
-            matrices = new NativeArray<Matrix4x4>(count, Allocator.Persistent);
+            data = new NativeArray<Data>(count, alloc);
+            matrices = new NativeArray<Matrix4x4>(count, alloc);
         }
 
         public void Dispose()
         {
             if (data.IsCreated) data.Dispose();
             if (matrices.IsCreated) matrices.Dispose();
-        }
-
-        public VerletPhysicsRenderer Copy()
-        {
-            VerletPhysicsRenderer copy = new VerletPhysicsRenderer(data.Length);
-            data.CopyTo(copy.data);
-            matrices.CopyTo(copy.matrices);
-            return copy;
         }
     }
 }
@@ -85,23 +77,5 @@ namespace BarelyFunctional.Interfaces
     public interface IVerletPhysicsRenderer
     {
         public void SetRenderer(VerletPhysicsRenderer readyToBeCopied);
-    }
-}
-
-namespace BarelyFunctional.AbstractClasses
-{
-    public abstract class VerletPhysicsParticleRenderer : MonoBehaviour, IVerletPhysicsRenderer
-    {
-        protected VerletPhysicsRenderer vRenderer;
-
-        public void SetRenderer(VerletPhysicsRenderer readyToBeCopied)
-        {
-            vRenderer = readyToBeCopied.Copy();
-        }
-
-        protected virtual void OnDestroy()
-        {
-            vRenderer.Dispose();
-        }
     }
 }

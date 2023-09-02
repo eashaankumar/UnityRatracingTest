@@ -1,4 +1,3 @@
-using BarelyFunctional.AbstractClasses;
 using BarelyFunctional.Interfaces;
 using BarelyFunctional.Structs;
 using System.Collections;
@@ -15,59 +14,71 @@ namespace BarelyFunctional.VerletPhysics
     {
         [SerializeField]
         double3 gravity;
-        [SerializeField]
-        float simDt;
-        [SerializeField]
-        VerletPhysicsParticleRenderer verletPhysicsRenderer;
+        [SerializeField, Min(0.0001f)]
+        double simDt;
+
+        public int count;
 
         VerletPhysicsSimulator simulatorJob;
         VerletPhysicsWorld world;
         VerletPhysicsToRendererConverter physicsToRendererConverterJob;
-        VerletPhysicsRenderer vrenderer;
 
-        private void Start()
-        {
-            StartCoroutine(RunPhysics());
-        }
+        float lastTick;
+
+        Unity.Mathematics.Random random;
 
         private void OnDestroy()
         {
             world.Dispose();
-            vrenderer.Dispose();
         }
 
-        IEnumerator RunPhysics()
+        private void Awake()
         {
             world = new VerletPhysicsWorld(gravity);
             simulatorJob = new VerletPhysicsSimulator();
             physicsToRendererConverterJob = new VerletPhysicsToRendererConverter();
-            while (true)
-            {
-                world.worldGravity = gravity;
-                simulatorJob.dt = (double)simDt;
-                JobHandle handle = simulatorJob.Schedule(world.ParticleCount, 64);
-                yield return new WaitUntil(() => handle.IsCompleted);
-                
-                // convert to renderer
-                vrenderer = new VerletPhysicsRenderer(world.ParticleCount);
-                physicsToRendererConverterJob.world = world;
-                physicsToRendererConverterJob.renderer = vrenderer;
-                handle = physicsToRendererConverterJob.Schedule(world.ParticleCount, 64);
-                yield return new WaitUntil(() => handle.IsCompleted);
-                // copy data to instanced renderer
-                verletPhysicsRenderer.SetRenderer(vrenderer);
-                vrenderer.Dispose();
-                yield return new WaitForSeconds(simDt);
-            }
+            random = new Unity.Mathematics.Random(1224214);
         }
+
+        public VerletPhysicsRenderer Tick()
+        {
+            float time = Time.time;
+            JobHandle handle;
+            if (time - lastTick >= simDt)
+            {
+                world.AddParticle(
+                    new VerletParticle 
+                    { 
+                        drag = 0, 
+                        mass = 1.0, 
+                        vel = new double3(UnityEngine.Random.value * 5 * 2 - 1, UnityEngine.Random.value * 10, UnityEngine.Random.value * 5 * 2 - 1) 
+                    });
+                world.worldGravity = gravity;
+                simulatorJob.dt = simDt;
+                simulatorJob.world = world;
+                handle = simulatorJob.Schedule(world.ParticleCount, 64);
+                handle.Complete();
+            }
+
+            // convert to renderer
+            VerletPhysicsRenderer vrenderer = new VerletPhysicsRenderer(world.ParticleCount, Allocator.TempJob);
+            physicsToRendererConverterJob.world = world;
+            physicsToRendererConverterJob.renderer = vrenderer;
+            physicsToRendererConverterJob.random = random;
+            handle = physicsToRendererConverterJob.Schedule(world.ParticleCount, 64);
+            handle.Complete();
+
+            count = world.ParticleCount;
+            lastTick = time;
+            // copy data to instanced renderer
+            return vrenderer;
+        }        
 
     }
 
-   
-
     public struct VerletPhysicsWorld : System.IDisposable
     {
-        NativeList<VerletParticle> particles;
+        public NativeList<VerletParticle> particles;
         public double3 worldGravity;
         bool isCreated;
 
@@ -81,6 +92,12 @@ namespace BarelyFunctional.VerletPhysics
             particles = new NativeList<VerletParticle>(Allocator.Persistent);
             worldGravity = g;
             isCreated = true;
+        }
+
+        public void AddParticle(VerletParticle p)
+        {
+            if (!particles.IsCreated) return;
+            particles.Add(p);
         }
 
         public int ParticleCount
@@ -112,16 +129,16 @@ namespace BarelyFunctional.VerletPhysics
     public struct VerletPhysicsSimulator : IJobParallelFor
     {
         [ReadOnly] public double dt;
-        public VerletPhysicsWorld world;
+        [NativeDisableParallelForRestriction] public VerletPhysicsWorld world;
 
         public void Execute(int index)
         {
-            if (!world.IsCreated) return;
-            if (index >= world.ParticleCount) return;
+            //if (!world.IsCreated) return;
+            //if (index >= world.ParticleCount) return;
 
             VerletParticle particle = world.GetParticle(index);
-            particle.acc += world.worldGravity;
-            particle.update(dt);
+            //particle.acc += world.worldGravity;
+            particle.update(dt, world.worldGravity);
             world.SetParticle(index, particle);
         }
     }
@@ -130,13 +147,17 @@ namespace BarelyFunctional.VerletPhysics
     public struct VerletPhysicsToRendererConverter : IJobParallelFor
     {
         [ReadOnly] public VerletPhysicsWorld world;
+        [ReadOnly] public Unity.Mathematics.Random random;
         public VerletPhysicsRenderer renderer;
 
         public void Execute(int index)
         {
-            renderer.data[index] = new Data() { color = new float3(0, 1, 0), emission = 1 };
+            renderer.data[index] = new Data() 
+            { 
+                color = new float3(random.NextFloat(0f, 1f), random.NextFloat(0f, 1f), random.NextFloat(0f, 1f)), emission = random.NextFloat(0f, 1f) 
+            };
 
-            VerletParticle p = world.GetParticle(0);
+            VerletParticle p = world.GetParticle(index);
             float3 pos = new float3((float)p.pos.x, (float)p.pos.y, (float)p.pos.z);
             renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1));
         }

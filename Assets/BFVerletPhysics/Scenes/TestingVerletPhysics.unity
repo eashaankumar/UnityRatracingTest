@@ -263,7 +263,7 @@ MonoBehaviour:
     y: -5
     z: 0
   simDt: 0.01
-  verletPhysicsRenderer: {fileID: 1555959823}
+  count: 0
 --- !u!1 &1555959819
 GameObject:
   m_ObjectHideFlags: 0
@@ -371,6 +371,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6eac00c625ec9984d94f0546cf5ec575, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  physicsMaster: {fileID: 664732257}
+  resolution: 0.5
   rayTracingShader: {fileID: 4807578003741378534, guid: 25de828becd32954ba57c3fe01f040cf, type: 3}
   bounceCountOpaque: 5
   bounceCountTransparent: 8

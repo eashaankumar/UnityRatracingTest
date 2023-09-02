@@ -5,14 +5,19 @@ using Unity.Mathematics;
 using Unity.Collections;
 using BarelyFunctional.Structs;
 using BarelyFunctional.Interfaces;
-using BarelyFunctional.AbstractClasses;
+using BarelyFunctional.VerletPhysics;
 
 // https://github.com/INedelcu/RayTracingMeshInstancingSimple
 namespace BarelyFunctional.Renderer
 {
     [ExecuteInEditMode]
-    public class VerletPhysicsInstancedRenderer : VerletPhysicsParticleRenderer
+    public class VerletPhysicsInstancedRenderer : MonoBehaviour
     {
+        [SerializeField]
+        BFVerletPhysicsMaster physicsMaster;
+        [SerializeField, Range(0.01f, 1f)]
+        float resolution = 0.5f;
+
         public RayTracingShader rayTracingShader = null;
 
         //public Cubemap envTexture = null;
@@ -72,11 +77,27 @@ namespace BarelyFunctional.Renderer
             cameraHeight = 0;
         }
 
+        public int PixelWidth
+        {
+            get
+            {
+                return (int)(Camera.main.pixelWidth * resolution);
+            }
+        }
+
+        public int PixelHeight
+        {
+            get
+            {
+                return (int)(Camera.main.pixelHeight * resolution);
+            }
+        }
+
         private void CreateResources()
         {
             CreateRayTracingAccelerationStructure();
 
-            if (cameraWidth != Camera.main.pixelWidth || cameraHeight != Camera.main.pixelHeight)
+            if (cameraWidth != PixelWidth || cameraHeight != PixelHeight)
             {
                 if (rayTracingOutput)
                     rayTracingOutput.Release();
@@ -84,8 +105,8 @@ namespace BarelyFunctional.Renderer
                 RenderTextureDescriptor rtDesc = new RenderTextureDescriptor()
                 {
                     dimension = TextureDimension.Tex2D,
-                    width = Camera.main.pixelWidth,
-                    height = Camera.main.pixelHeight,
+                    width = PixelWidth,
+                    height = PixelHeight,
                     depthBufferBits = 0,
                     volumeDepth = 1,
                     msaaSamples = 1,
@@ -97,16 +118,15 @@ namespace BarelyFunctional.Renderer
                 rayTracingOutput = new RenderTexture(rtDesc);
                 rayTracingOutput.Create();
 
-                cameraWidth = (uint)Camera.main.pixelWidth;
-                cameraHeight = (uint)Camera.main.pixelHeight;
+                cameraWidth = (uint)PixelWidth;
+                cameraHeight = (uint)PixelHeight;
 
                 convergenceStep = 0;
             }
         }
 
-        protected override void OnDestroy()
+        void OnDestroy()
         {
-            base.OnDestroy();
             ReleaseResources();
         }
 
@@ -142,8 +162,6 @@ namespace BarelyFunctional.Renderer
                 return; 
             }
 
-            if (!vRenderer.data.IsCreated) return;
-
             if (rayTracingAccelerationStructure == null)
                 return;
 
@@ -162,22 +180,27 @@ namespace BarelyFunctional.Renderer
 
             #region Instancing
 
-            /*vRenderer = new VerletPhysicsRenderer(2);
-            vRenderer.data[0] = new Data { color = new float3(1, 0, 0), emission = Mathf.Sin(Time.time) * 0.5f + 0.5f };
+            VerletPhysicsRenderer vRenderer = physicsMaster.Tick();
+            /*vRenderer.data[0] = new Data { color = new float3(1, 0, 0), emission = Mathf.Sin(Time.time) * 0.5f + 0.5f };
             vRenderer.data[1] = new Data { color = new float3(1, 1, 0), emission = Mathf.Cos(Time.time) * 0.5f + 0.5f };
             vRenderer.matrices[0] = float4x4.TRS(target.position, target.rotation, target.localScale);
             vRenderer.matrices[1] = float4x4.TRS(target.position + target.forward * 2, target.rotation, target.localScale);*/
+            GraphicsBuffer data = null;
+            if (vRenderer.data.Length > 0)
+            {
+                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.data.Length, 4 * sizeof(float));
+                data.SetData(vRenderer.data);
 
-            GraphicsBuffer data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 2, 4 * sizeof(float));
-            data.SetData(vRenderer.data);
+                RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);
 
-            RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);
+                config.materialProperties = new MaterialPropertyBlock();
+                config.materialProperties.SetBuffer("g_Data", data);
+                config.material.enableInstancing = true;
 
-            config.materialProperties = new MaterialPropertyBlock();
-            config.materialProperties.SetBuffer("g_Data", data);
-            config.material.enableInstancing = true;
+                rayTracingAccelerationStructure.AddInstances(config, vRenderer.matrices);
 
-            rayTracingAccelerationStructure.AddInstances(config, vRenderer.matrices);
+            }
+            vRenderer.Dispose();
             #endregion
 
             // Not really needed per frame if the scene is static.
@@ -208,8 +231,7 @@ namespace BarelyFunctional.Renderer
             prevCameraMatrix = Camera.main.cameraToWorldMatrix;
             prevBounceCountOpaque = bounceCountOpaque;
             prevBounceCountTransparent = bounceCountTransparent;
-
-            data.Release();
+            if (data != null) data.Release();
         }
     }
 }
