@@ -70,6 +70,119 @@ namespace BarelyFunctional.Structs
         }
     }
 
+    public struct VerletTargetDistLink : IEqualityComparer<VerletTargetDistLink>
+    {
+        public int p1Id, p2Id;
+        public double targetDist;
+        public VerletTargetDistLink(int _p1, int _p2, double _targetDist)
+        {
+            p1Id = _p1;
+            p2Id = _p2;
+            targetDist = _targetDist;
+        }
+
+        public bool Equals(VerletTargetDistLink x, VerletTargetDistLink y)
+        {
+            return x.p1Id == y.p1Id && x.p2Id == y.p2Id;
+        }
+
+        public int GetHashCode(VerletTargetDistLink obj)
+        {
+            return obj.p1Id.GetHashCode() + obj.p2Id.GetHashCode();
+        }
+
+        public void Apply(VerletPhysicsWorld world)
+        {
+            VerletParticle p1 = world.GetParticle(p1Id);
+            VerletParticle p2 = world.GetParticle(p2Id);
+
+            double3 axis = p1.pos_current - p2.pos_current;
+            double dist = math.length(axis);
+            double3 n = axis / dist;
+            double delta = targetDist - dist;
+            p1.pos_current += 0.5 * delta * n;
+            p2.pos_current -= 0.5 * delta * n;
+
+            world.SetParticle(p1Id, p1);
+            world.SetParticle(p2Id, p2);
+        }
+    }
+
+    public struct VerletPhysicsWorld : System.IDisposable
+    {
+        public NativeList<VerletParticle> particles;
+        public double3 worldGravity;
+        bool isCreated;
+
+        public bool IsCreated
+        {
+            get { return isCreated; }
+        }
+
+        public VerletPhysicsWorld(double3 g, Allocator a)
+        {
+            particles = new NativeList<VerletParticle>(a);
+            worldGravity = g;
+            isCreated = true;
+        }
+
+        public void AddParticle(VerletParticle p)
+        {
+            if (!particles.IsCreated) return;
+            particles.Add(p);
+        }
+
+        public int ParticleCount
+        {
+            get
+            {
+                return particles.IsCreated ? particles.Length : 0;
+            }
+        }
+
+        public VerletParticle GetParticle(int i)
+        {
+            return particles[i];
+        }
+
+        public void SetParticle(int i, VerletParticle p)
+        {
+            particles[i] = p;
+        }
+
+        public void Dispose()
+        {
+            if (particles.IsCreated) particles.Dispose();
+            isCreated = false;
+        }
+    }
+
+
+    public struct VoxelWorld : System.IDisposable
+    {
+        NativeList<Voxel> voxels;
+
+        public VoxelWorld(Allocator a)
+        {
+            voxels = new NativeList<Voxel>(a);
+        }
+
+        public void Dispose()
+        {
+            if (voxels.IsCreated) voxels.Dispose();
+        }
+
+        public Voxel GetVoxel(int i)
+        {
+            return voxels[i];
+        }
+
+        public void AddVoxel(Voxel v)
+        {
+            if (voxels.IsCreated) voxels.Add(v);
+        }
+    }
+
     public struct Data
     {
         public float3 color;

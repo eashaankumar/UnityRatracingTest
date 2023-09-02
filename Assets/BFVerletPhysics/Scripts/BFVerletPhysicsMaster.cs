@@ -65,13 +65,13 @@ namespace BarelyFunctional.VerletPhysics
                         drag = 0,
                         mass = 1.0,
                         radius = 1,
-                        pos_current = new double3(x, -10, z) * 1,
+                        pos_current = new double3(x, -10, z) * 2,
                         freeze = true,
                     });
                     voxelWorld.AddVoxel(
                         new Voxel
                         (
-                            new Structs.Color(math.abs(x / (size.x / 2f)), 0, 0),
+                            new Structs.Color(math.sin(x) * 0.5f + 0.5f, math.cos(x + z) * 0.5f + 0.5f, math.tan(z) * 0.5f + 0.5f),
                             0.1f
                         ));
                 }
@@ -98,7 +98,7 @@ namespace BarelyFunctional.VerletPhysics
                     voxelWorld.AddVoxel(
                         new Voxel
                         (
-                            new Structs.Color(random.NextFloat(), random.NextFloat(), random.NextFloat()),
+                            new Structs.Color(math.sin(Time.time) * 0.5f + 0.5f, math.cos(Time.time) * 0.5f + 0.5f, math.tan(Time.time) * 0.5f + 0.5f),
                             random.NextFloat()
                         ));
                 }
@@ -143,79 +143,7 @@ namespace BarelyFunctional.VerletPhysics
 
     }
 
-    public struct VoxelWorld : System.IDisposable
-    {
-        NativeList<Voxel> voxels;
 
-        public VoxelWorld(Allocator a)
-        {
-            voxels = new NativeList<Voxel>(a);
-        }
-
-        public void Dispose()
-        {
-            if (voxels.IsCreated) voxels.Dispose();    
-        }
-
-        public Voxel GetVoxel(int i)
-        {
-            return voxels[i];
-        }
-
-        public void AddVoxel(Voxel v)
-        {
-            if(voxels.IsCreated) voxels.Add(v);
-        }
-    }
-
-    public struct VerletPhysicsWorld : System.IDisposable
-    {
-        public NativeList<VerletParticle> particles;
-        public double3 worldGravity;
-        bool isCreated;
-
-        public bool IsCreated
-        {
-            get { return isCreated; }
-        }
-
-        public VerletPhysicsWorld(double3 g, Allocator a)
-        {
-            particles = new NativeList<VerletParticle>(a);
-            worldGravity = g;
-            isCreated = true;
-        }
-
-        public void AddParticle(VerletParticle p)
-        {
-            if (!particles.IsCreated) return;
-            particles.Add(p);
-        }
-
-        public int ParticleCount
-        {
-            get
-            {
-                return particles.IsCreated ? particles.Length : 0;
-            }
-        }
-
-        public VerletParticle GetParticle(int i)
-        {
-            return particles[i];
-        }
-
-        public void SetParticle(int i, VerletParticle p)
-        {
-            particles[i] = p;
-        }
-
-        public void Dispose()
-        {
-            if (particles.IsCreated) particles.Dispose();
-            isCreated = false;
-        }
-    }
 
     public struct VerletPhysicsHashGrid : System.IDisposable
     {
