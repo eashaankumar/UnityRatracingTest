@@ -221,11 +221,19 @@ namespace BarelyFunctional.Renderer
             // Output
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), rayTracingOutput);
 
-            rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
+            //for (int i = 0; i < 10; i++)
+            {
+
+                rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
+
+                rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
+
+                convergenceStep++;
+
+            }
 
             Graphics.Blit(rayTracingOutput, dest);
 
-            convergenceStep++;
 
             prevCameraMatrix = Camera.main.cameraToWorldMatrix;
             prevBounceCountOpaque = bounceCountOpaque;
