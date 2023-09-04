@@ -4,6 +4,7 @@
     {
         _Color("Main Color", Color) = (1, 1, 1, 1)
         _MainTex("Albedo (RGB)", 2D) = "white" {}
+        _Glow("Glow", Float) = 1
     }
 
     SubShader
@@ -64,7 +65,8 @@
 
             #pragma raytracing test
 
-            float4 _Color;            
+            float4 _Color;    
+            float _Glow;
 
             Texture2D _MainTex;
             float4 _MainTex_ST;
@@ -133,7 +135,7 @@
               
                 float3 albedo = texColor * _Color.xyz * PointLightColor * PointLightIntensity * saturate(dot(faceNormal, normalize(vecToLight))) * CalculateLightFalloff(distToLight, PointLightRange);
 
-                payload.color = float4(albedo, 1);
+                payload.color = float4(albedo, 1) * _Glow;
                 payload.worldPos = float4(worldPosition, 1);
             }
 

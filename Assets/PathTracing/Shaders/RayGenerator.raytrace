@@ -30,7 +30,7 @@ void MainRayGenShader()
     int convergenceStep = g_ConvergenceStep;
     uint rngState = uint(uint(launchIndex.x) * uint(1973) + uint(launchIndex.y) * uint(9277) + uint(convergenceStep + g_FrameIndex) * uint(26699)) | uint(1);
 
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 10; i++)
     {
        
 

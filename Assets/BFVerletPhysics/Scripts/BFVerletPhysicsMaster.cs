@@ -54,7 +54,7 @@ namespace BarelyFunctional.VerletPhysics
 
         void BuildGround()
         {
-            int2 size = new int2(10, 10);
+            int2 size = new int2(25, 25);
             for(int x = -size.x/2; x <= size.x/2; x++)
             {
                 for (int z = -size.y / 2; z <= size.y / 2; z++)
@@ -71,9 +71,9 @@ namespace BarelyFunctional.VerletPhysics
                     voxelWorld.AddVoxel(
                         new Voxel
                         (
-                            new Structs.Color(math.sin(x) * 0.5f + 0.5f, math.cos(x + z) * 0.5f + 0.5f, math.tan(z) * 0.5f + 0.5f),
-                            0.1f
-                        ));
+                            new Structs.Color(1, 1, 1),
+                            math.abs(x) % 4 == 0 && math.abs(z) % 4 == 0 ? 0.1f : 0
+                        )) ;
                 }
             }
         }
@@ -83,17 +83,17 @@ namespace BarelyFunctional.VerletPhysics
             float time = Time.time;
             if (time - lastTick >= simDt)
             {
-                if (random.NextFloat(0f, 1f) < 0.5f)
+                if (random.NextFloat(0f, 1f) < 0.1f)
                 {
-                    double3 pos = math.normalize(random.NextDouble3Direction()) * 1;
+                    double3 pos = new double3(math.sin(verletWorld.ParticleCount * 2), 0, math.cos(verletWorld.ParticleCount * 2)) * 5;
                     verletWorld.AddParticle(
                         new VerletParticle
                         {
                             drag = 0.1,
                             mass = 1.0,
-                            pos_current = pos,
+                            pos_current = pos + new double3(0,0.001,0),
                             pos_old = pos,
-                            radius = math.clamp(random.NextDouble(), 0.1, 0.5),
+                            radius = math.clamp(random.NextDouble(), 0.75, 1.0),
                         });
                     voxelWorld.AddVoxel(
                         new Voxel

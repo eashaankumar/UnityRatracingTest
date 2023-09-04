@@ -16,6 +16,8 @@ namespace BarelyFunctional.Renderer
         BFVerletPhysicsMaster physicsMaster;
         [SerializeField, Range(0.01f, 1f)]
         float resolution = 0.5f;
+        [SerializeField]
+        TMPro.TMP_Text text;
 
         public RayTracingShader rayTracingShader = null;
 
@@ -173,7 +175,7 @@ namespace BarelyFunctional.Renderer
             if (prevBounceCountTransparent != bounceCountTransparent)
                 convergenceStep = 0;
 
-            convergenceStep = 0;
+            convergenceStep = 3;
 
             rayTracingAccelerationStructure.ClearInstances();
 
@@ -199,6 +201,8 @@ namespace BarelyFunctional.Renderer
                 rayTracingAccelerationStructure.AddInstances(config, vRenderer.matrices);
 
             }
+            text.text = $"Voxels {vRenderer.data.Length}\n{SystemInfo.graphicsDeviceName}\n{SystemInfo.graphicsDeviceType}\n{rayTracingOutput.width}x{rayTracingOutput.height}";
+
             vRenderer.Dispose();
             #endregion
 

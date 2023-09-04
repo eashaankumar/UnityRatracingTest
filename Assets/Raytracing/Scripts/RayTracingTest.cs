@@ -26,7 +26,7 @@ public class RayTracingTest : MonoBehaviour
 
             raytracingAccelerationStructure = new RayTracingAccelerationStructure(settings);
 
-            raytracingAccelerationStructure.Build();
+            raytracingAccelerationStructure.Build(); 
         }
     }
 
