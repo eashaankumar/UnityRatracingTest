@@ -23,6 +23,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         UnityEngine.Color bottomColor;
         [SerializeField]
         RawImages images;
+        [SerializeField]
+        Canvas iamgesCanvas;
 
         [System.Serializable]
         struct RawImages
@@ -43,6 +45,12 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             public RawImage noisyImage;
             [SerializeField]
             public RawImage convergedImage;
+        }
+
+        [System.Serializable]
+        public enum ImageType
+        {
+            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, SHAPE, EMISSION, MATERIAL
         }
 
 
@@ -75,6 +83,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             materialRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
+
+        ImageType imageType = ImageType.NOISY;
 
         private void CreateRayTracingAccelerationStructure()
         {
@@ -227,7 +237,15 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         }
 
-       
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.M))
+            {
+                iamgesCanvas.enabled = !iamgesCanvas.enabled;
+            }
+        }
+
+
         [ImageEffectOpaque]
         void OnRenderImage(RenderTexture src, RenderTexture dest)
         {
@@ -318,7 +336,33 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                  
             }
 
-            Graphics.Blit(noisyRadianceRT, dest);
+            switch(imageType)
+            {
+                case ImageType.NOISY:
+                    Graphics.Blit(noisyRadianceRT, dest);
+                    break;
+                case ImageType.CONVERGED:
+                    Graphics.Blit(convergedRT, dest);
+                    break;
+                case ImageType.NORMAL:
+                    Graphics.Blit(normalRT, dest);
+                    break;
+                case ImageType.ALBEDO:
+                    Graphics.Blit(albedoRT, dest);
+                    break;
+                case ImageType.DEPTH:
+                    Graphics.Blit(depthRT, dest);
+                    break;
+                case ImageType.SHAPE:
+                    Graphics.Blit(shapeRT, dest);
+                    break;
+                case ImageType.EMISSION:
+                    Graphics.Blit(emissionRT, dest);
+                    break;
+                case ImageType.MATERIAL:
+                    Graphics.Blit(materialRT, dest);
+                    break;
+            }
 
             images.normalImage.texture = normalRT;
             images.albedoImage.texture = albedoRT;
@@ -326,11 +370,19 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             images.shapeImage.texture = shapeRT;
             images.emissionImage.texture = emissionRT;
             images.materialImage.texture = materialRT;
+            images.noisyImage.texture = noisyRadianceRT;
+            images.convergedImage.texture = convergedRT;
 
             prevCameraMatrix = Camera.main.cameraToWorldMatrix;
             prevBounceCountOpaque = bounceCountOpaque;
             prevBounceCountTransparent = bounceCountTransparent;
             if (data != null) data.Release();
+        }
+
+         
+        public void SetTexture(int imageType)
+        {
+            this.imageType = (ImageType) imageType;
         }
     }
 }
