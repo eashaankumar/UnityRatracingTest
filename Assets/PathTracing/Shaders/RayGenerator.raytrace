@@ -11,6 +11,8 @@ float                           g_Zoom;
 float                           g_AspectRatio;
 uint                            g_ConvergenceStep;
 uint                            g_FrameIndex;
+float3                          g_SkyboxBottomColor;
+float3                          g_SkyboxTopColor;
 /*TextureCube<float4>             g_EnvTex;
 SamplerState                    sampler_g_EnvTex;*/
 
@@ -113,7 +115,10 @@ void MainRayGenShader()
 [shader("miss")]
 void MainMissShader0(inout RayPayload payload : SV_RayPayload)
 {
-    /*payload.emission                = g_EnvTex.SampleLevel(sampler_g_EnvTex, WorldRayDirection(), 0).xyz;
-    payload.bounceIndexOpaque       = -1;*/
+    /*payload.emission                = g_EnvTex.SampleLevel(sampler_g_EnvTex, WorldRayDirection(), 0).xyz;*/
+    float dotProd = dot(WorldRayDirection(), float3(0, 1, 0));
+    float dotProdNorm = dotProd * 0.5 + 0.5;
+    payload.emission = lerp(g_SkyboxBottomColor, g_SkyboxTopColor, dotProdNorm);
+    payload.bounceIndexOpaque       = -1;
 
 }
