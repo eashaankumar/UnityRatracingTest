@@ -18,6 +18,13 @@ SamplerState                    sampler_g_EnvTex;*/
 
 // Output
 RWTexture2D<float4>             g_Radiance;
+RWTexture2D<float4>             g_Normal;
+RWTexture2D<float4>             g_Albedo;
+RWTexture2D<float>              g_Depth;
+RWTexture2D<float>              g_Shape;
+RWTexture2D<float>              g_Emission;
+RWTexture2D<float>              g_Material;
+
 
 [shader("raygeneration")]
 void MainRayGenShader()
@@ -68,6 +75,15 @@ void MainRayGenShader()
         payload.bounceRayOrigin         = float3(0, 0, 0);
         payload.bounceRayDirection      = float3(0, 0, 0);
         payload.k                       = 1;
+        
+        MetaPayload meta;
+        meta.normal                     = float3(0,0,0);
+        meta.depth                      = -1;
+        meta.albedo                     = float3(-1,-1,-1);
+        meta.shape                      = -1;
+        meta.emission                   = -1;
+        meta.material                   = -1;
+        payload.meta                    = meta;
 
         // Safe net for when shaders have compilation errors and don't increase the bounce index, resulting in an infinite loop.
         uint safeNet = 0;
@@ -109,6 +125,11 @@ void MainRayGenShader()
 
         g_Radiance[launchIndex] = float4(result, 1);
         convergenceStep++;
+
+        if (i == 0)
+        {
+
+        }
     }
 }
 

@@ -1,3 +1,13 @@
+struct MetaPayload
+{
+    float3 normal;
+    float3 albedo;
+    float depth;
+    float shape;
+    float emission;
+    float material;
+};
+
 struct RayPayload
 {
     float k;                // Energy conservation constraint
@@ -8,4 +18,5 @@ struct RayPayload
     float3 bounceRayOrigin;
     float3 bounceRayDirection;
     uint rngState;          // Random number generator state.
+    MetaPayload meta;
 };

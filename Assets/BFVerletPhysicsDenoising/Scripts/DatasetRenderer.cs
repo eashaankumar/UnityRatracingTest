@@ -6,6 +6,7 @@ using Unity.Collections;
 using BarelyFunctional.Structs;
 using BarelyFunctional.Interfaces;
 using BarelyFunctional.VerletPhysics;
+using UnityEngine.UI;
 
 // https://github.com/INedelcu/RayTracingMeshInstancingSimple
 namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
@@ -20,6 +21,30 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         UnityEngine.Color topColor;
         [SerializeField]
         UnityEngine.Color bottomColor;
+        [SerializeField]
+        RawImages images;
+
+        [System.Serializable]
+        struct RawImages
+        {
+            [SerializeField]
+            public RawImage normalImage;
+            [SerializeField]
+            public RawImage depthImage;
+            [SerializeField]
+            public RawImage albedoImage;
+            [SerializeField]
+            public RawImage shapeImage;
+            [SerializeField]
+            public RawImage emissionImage;
+            [SerializeField]
+            public RawImage materialImage;
+            [SerializeField]
+            public RawImage noisyImage;
+            [SerializeField]
+            public RawImage convergedImage;
+        }
+
 
         public RayTracingShader rayTracingShader = null;
 
@@ -45,7 +70,9 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         private uint prevBounceCountOpaque = 0;
         private uint prevBounceCountTransparent = 0;
 
-        private RenderTexture rayTracingOutput = null;
+        private RenderTexture noisyRadianceRT = null, convergedRT = null;
+        private RenderTexture normalRT = null, depthRT = null, albedoRT = null, shapeRT = null, emissionRT = null,
+            materialRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
@@ -70,14 +97,26 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 rayTracingAccelerationStructure = null;
             }
 
-            if (rayTracingOutput != null)
+            if (noisyRadianceRT != null)
             {
-                rayTracingOutput.Release();
-                rayTracingOutput = null;
+                ReleaseRT(ref noisyRadianceRT);
+                ReleaseRT(ref convergedRT);
+                ReleaseRT(ref normalRT);
+                ReleaseRT(ref depthRT);
+                ReleaseRT(ref albedoRT);
+                ReleaseRT(ref shapeRT);
+                ReleaseRT(ref emissionRT);
+                ReleaseRT(ref materialRT);
             }
 
             cameraWidth = 0;
             cameraHeight = 0;
+        }
+
+        void ReleaseRT(ref RenderTexture tex)
+        {
+            tex.Release();
+            tex = null;
         }
 
         public int PixelWidth
@@ -102,10 +141,20 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
             if (cameraWidth != PixelWidth || cameraHeight != PixelHeight)
             {
-                if (rayTracingOutput)
-                    rayTracingOutput.Release();
+                if (noisyRadianceRT)
+                {
+                    //noisyRadianceRT.Release();
+                    ReleaseRT(ref noisyRadianceRT);
+                    ReleaseRT(ref convergedRT);
+                    ReleaseRT(ref normalRT);
+                    ReleaseRT(ref depthRT);
+                    ReleaseRT(ref albedoRT);
+                    ReleaseRT(ref shapeRT);
+                    ReleaseRT(ref emissionRT);
+                    ReleaseRT(ref materialRT);
+                }
 
-                RenderTextureDescriptor rtDesc = new RenderTextureDescriptor()
+                RenderTextureDescriptor rtDesc4Channel = new RenderTextureDescriptor()
                 {
                     dimension = TextureDimension.Tex2D,
                     width = PixelWidth,
@@ -118,14 +167,46 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     enableRandomWrite = true,
                 };
 
-                rayTracingOutput = new RenderTexture(rtDesc);
-                rayTracingOutput.Create();
+                RenderTextureDescriptor rtDesc1Channel = new RenderTextureDescriptor()
+                {
+                    dimension = TextureDimension.Tex2D,
+                    width = PixelWidth,
+                    height = PixelHeight,
+                    depthBufferBits = 0,
+                    volumeDepth = 1,
+                    msaaSamples = 1,
+                    vrUsage = VRTextureUsage.OneEye,
+                    graphicsFormat = GraphicsFormat.R32_SFloat,
+                    enableRandomWrite = true,
+                };
+
+                CreateRenderTexture(ref noisyRadianceRT, rtDesc4Channel);
+
+                CreateRenderTexture(ref convergedRT, rtDesc4Channel);
+
+                CreateRenderTexture(ref normalRT, rtDesc4Channel);
+
+                CreateRenderTexture(ref albedoRT, rtDesc4Channel);
+
+                CreateRenderTexture(ref depthRT, rtDesc1Channel);
+
+                CreateRenderTexture(ref shapeRT, rtDesc1Channel);
+
+                CreateRenderTexture(ref emissionRT, rtDesc1Channel);
+
+                CreateRenderTexture(ref materialRT, rtDesc1Channel);
 
                 cameraWidth = (uint)PixelWidth;
-                cameraHeight = (uint)PixelHeight;
+                cameraHeight = (uint)PixelHeight; 
 
                 //convergenceStep = 0;
             }
+        }
+
+        void CreateRenderTexture(ref RenderTexture tex, RenderTextureDescriptor desc)
+        {
+            tex = new RenderTexture(desc);
+            tex.Create();
         }
 
         void OnDestroy()
@@ -218,7 +299,13 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             //rayTracingShader.SetTexture(Shader.PropertyToID("g_EnvTex"), envTexture);
 
             // Output
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), rayTracingOutput);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Normal"), normalRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Shape"), shapeRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Material"), materialRT);
 
             //for (int i = 0; i < 10; i++)
             {
@@ -231,8 +318,14 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                  
             }
 
-            Graphics.Blit(rayTracingOutput, dest);
+            Graphics.Blit(noisyRadianceRT, dest);
 
+            images.normalImage.texture = normalRT;
+            images.albedoImage.texture = albedoRT;
+            images.depthImage.texture = depthRT;
+            images.shapeImage.texture = shapeRT;
+            images.emissionImage.texture = emissionRT;
+            images.materialImage.texture = materialRT;
 
             prevCameraMatrix = Camera.main.cameraToWorldMatrix;
             prevBounceCountOpaque = bounceCountOpaque;
