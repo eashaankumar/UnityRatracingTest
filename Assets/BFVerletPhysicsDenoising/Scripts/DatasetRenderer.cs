@@ -325,18 +325,24 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Material"), materialRT);
 
-            //for (int i = 0; i < 10; i++)
-            {
+            rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
 
+            rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
+
+            convergenceStep++;
+
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), convergedRT);
+
+
+            for(int i = 0; i < 10; i++)
+            {
                 rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
 
                 rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
-
                 convergenceStep++;
-                 
             }
 
-            switch(imageType)
+            switch (imageType)
             {
                 case ImageType.NOISY:
                     Graphics.Blit(noisyRadianceRT, dest);

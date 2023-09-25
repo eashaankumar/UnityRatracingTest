@@ -39,7 +39,11 @@ void MainRayGenShader()
     int convergenceStep = g_ConvergenceStep;
     uint rngState = uint(uint(launchIndex.x) * uint(1973) + uint(launchIndex.y) * uint(9277) + uint(convergenceStep + g_FrameIndex) * uint(26699)) | uint(1);
 
-    for(int i = 0; i < 10; i++)
+    g_Albedo[launchIndex] = 0;
+    g_Normal[launchIndex] = 0;
+
+    int rays = 10;
+    for(int i = 0; i < rays; i++)
     {
        
 
@@ -91,7 +95,6 @@ void MainRayGenShader()
 
         float3 radiance = float3(0, 0, 0);
         float3 throughput = float3(1, 1, 1);
-
         do
         {
             TraceRay(g_AccelStruct, 0, 0xFF, 0, 1, missShaderIndex, ray, payload);
@@ -119,18 +122,16 @@ void MainRayGenShader()
         }
         while ((payload.bounceIndexOpaque <= g_BounceCountOpaque) && (payload.bounceIndexTransparent <= g_BounceCountTransparent) && (++safeNet < maxSafeNet));
 
-        float3 prevRadiance = g_Radiance[launchIndex].xyz;
+        g_Radiance[launchIndex] = float4(lerp(g_Radiance[launchIndex].xyz, radiance, 1 / float(convergenceStep + 1)), 1);
 
-        float3 result = lerp(prevRadiance, radiance, 1 / float(convergenceStep + 1));
+        g_Albedo[launchIndex] += float4(payload.meta.albedo, 1);
+        g_Normal[launchIndex] += float4(payload.meta.normal * 0.5 + 0.5, 1);
 
-        g_Radiance[launchIndex] = float4(result, 1);
         convergenceStep++;
-
-        if (i == 0)
-        {
-
-        }
     }
+
+    g_Albedo[launchIndex] = g_Albedo[launchIndex] / rays;
+    g_Normal[launchIndex] = g_Normal[launchIndex] / rays;
 }
 
 [shader("miss")]
@@ -141,5 +142,5 @@ void MainMissShader0(inout RayPayload payload : SV_RayPayload)
     float dotProdNorm = dotProd * 0.5 + 0.5;
     payload.emission = lerp(g_SkyboxBottomColor, g_SkyboxTopColor, dotProdNorm);
     payload.bounceIndexOpaque       = -1;
-
+    payload.albedo = -1;
 }
