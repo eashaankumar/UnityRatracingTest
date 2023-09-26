@@ -177,19 +177,6 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     enableRandomWrite = true,
                 };
 
-                RenderTextureDescriptor rtDesc1Channel = new RenderTextureDescriptor()
-                {
-                    dimension = TextureDimension.Tex2D,
-                    width = PixelWidth,
-                    height = PixelHeight,
-                    depthBufferBits = 0,
-                    volumeDepth = 1,
-                    msaaSamples = 1,
-                    vrUsage = VRTextureUsage.OneEye,
-                    graphicsFormat = GraphicsFormat.R32_SFloat,
-                    enableRandomWrite = true,
-                };
-
                 CreateRenderTexture(ref noisyRadianceRT, rtDesc4Channel);
 
                 CreateRenderTexture(ref convergedRT, rtDesc4Channel);
@@ -198,13 +185,13 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 CreateRenderTexture(ref albedoRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref depthRT, rtDesc1Channel);
+                CreateRenderTexture(ref depthRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref shapeRT, rtDesc1Channel);
+                CreateRenderTexture(ref shapeRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref emissionRT, rtDesc1Channel);
+                CreateRenderTexture(ref emissionRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref materialRT, rtDesc1Channel);
+                CreateRenderTexture(ref materialRT, rtDesc4Channel);
 
                 cameraWidth = (uint)PixelWidth;
                 cameraHeight = (uint)PixelHeight; 

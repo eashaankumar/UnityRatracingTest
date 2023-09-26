@@ -2,7 +2,6 @@ struct MetaPayload
 {
     float3 normal;
     float3 albedo;
-    float depth;
     float shape;
     float emission;
     float material;

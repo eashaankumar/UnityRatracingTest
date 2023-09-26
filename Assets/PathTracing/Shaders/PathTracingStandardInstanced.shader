@@ -28,7 +28,7 @@ Shader "PathTracing/StandardInstanced"
             #include "RayPayload.hlsl"
             #include "Utils.hlsl"
             #include "GlobalResources.hlsl"
-
+            
             #pragma raytracing test
 
             #pragma shader_feature_raytracing _EMISSION
