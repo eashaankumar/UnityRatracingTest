@@ -186,7 +186,19 @@ namespace BarelyFunctional.Structs
     public struct Data
     {
         public float3 color;
-        public float emission;
+        public float3 specular;
+        public float3 smoothness;
+        public float3 metallic;
+        public float3 emission;
+        public float ior;
+
+        public static int Size
+        {
+            get
+            {
+                return (3 + 3 + 3 + 3 + 3 + 1) * sizeof(float);
+            }
+        }
     };
 
     public struct VerletPhysicsRenderer : System.IDisposable

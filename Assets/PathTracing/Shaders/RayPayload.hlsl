@@ -2,9 +2,9 @@ struct MetaPayload
 {
     float3 normal;
     float3 albedo;
+    float3 emission;
     float shape;
-    float emission;
-    float material;
+    float3 specular;
 };
 
 struct RayPayload

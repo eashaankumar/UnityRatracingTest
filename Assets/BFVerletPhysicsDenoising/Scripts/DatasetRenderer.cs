@@ -269,7 +269,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             GraphicsBuffer data = null;
             if (vRenderer.data.Length > 0)
             {
-                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.data.Length, 4 * sizeof(float));
+                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.data.Length, Data.Size);
                 data.SetData(vRenderer.data);
 
                 RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);

@@ -81,8 +81,8 @@ void MainRayGenShader()
         meta.normal                     = float3(0,0,0);
         meta.albedo                     = float3(-1,-1,-1);
         meta.shape                      = -1;
-        meta.emission                   = -1;
-        meta.material                   = -1;
+        meta.emission                   = float3(0, 0, 0);
+        meta.specular                   = float3(0,0,0);
         payload.meta                    = meta;
 
         // Safe net for when shaders have compilation errors and don't increase the bounce index, resulting in an infinite loop.
@@ -159,8 +159,8 @@ void MainRayGenShader()
     meta.normal                     = float3(0,0,0);
     meta.albedo                     = float3(-1,-1,-1);
     meta.shape                      = -1;
-    meta.emission                   = -1;
-    meta.material                   = -1;
+    meta.emission                   = float3(0, 0, 0);
+    meta.specular                   = float3(0,0,0);
     payload.meta                    = meta;
 
     uint missShaderIndex = 0;
@@ -169,10 +169,10 @@ void MainRayGenShader()
 
     float depthD = distance(payload.bounceRayOrigin, _WorldSpaceCameraPos);
     g_Depth[launchIndex] = float4( float3(1,1,1) / depthD , 1);
-    
     g_Albedo[launchIndex] = float4(payload.meta.albedo, 1);
     g_Normal[launchIndex] = float4(payload.meta.normal * 0.5 + 0.5, 1);
-        
+    g_Emission[launchIndex] = float4(payload.meta.emission, 1);
+    g_Material[launchIndex] = float4(payload.meta.specular, 1);
 }
 
 [shader("miss")]
@@ -188,5 +188,5 @@ void MainMissShader0(inout RayPayload payload : SV_RayPayload)
     
     payload.meta.normal = WorldRayDirection();
     payload.meta.albedo = 0;
-    
+    payload.meta.emission = payload.emission;
 }

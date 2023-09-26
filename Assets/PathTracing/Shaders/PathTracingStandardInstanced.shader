@@ -6,8 +6,6 @@ Shader "PathTracing/StandardInstanced"
 
         _EmissionTex("Emission", 2D) = "white" {}
 
-        _SpecularColor("SpecularColor", Color) = (1, 1, 1, 1)
-
         _Smoothness("Smoothness", Range(0.0, 1.0)) = 0.5
 
         [Gamma] _Metallic("Metallic", Range(0.0, 1.0)) = 0.0
@@ -45,12 +43,14 @@ Shader "PathTracing/StandardInstanced"
             struct Data
             {
                 float3 color;
-                float emission;
+                float3 specular;
+                float3 smoothness;
+                float3 metallic;
+                float3 emission;
+                float ior;
             };
 
             StructuredBuffer<Data> g_Data;
-
-            float4 _SpecularColor;
 
             Texture2D<float4> _MainTex;
             float4 _MainTex_ST;
@@ -124,7 +124,7 @@ Shader "PathTracing/StandardInstanced"
 
                 float3 emission = float3(0, 0, 0);
 
-                emission = instanceData.color.xyz * instanceData.emission * _EmissionTex.SampleLevel(sampler__EmissionTex, _EmissionTex_ST.xy * v.uv + _EmissionTex_ST.zw, 0).xyz;
+                emission = instanceData.emission * _EmissionTex.SampleLevel(sampler__EmissionTex, _EmissionTex_ST.xy * v.uv + _EmissionTex_ST.zw, 0).xyz;
               
                 bool isFrontFace = HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE;
 
@@ -159,7 +159,7 @@ Shader "PathTracing/StandardInstanced"
                 float3 albedo = instanceData.color.xyz * _MainTex.SampleLevel(sampler__MainTex, _MainTex_ST.xy * v.uv + _MainTex_ST.zw, 0).xyz;
 
                 payload.k                   = (doSpecular == 1) ? specularChance : 1 - specularChance;
-                payload.albedo              = lerp(albedo, _SpecularColor.xyz, doSpecular);
+                payload.albedo              = lerp(albedo, instanceData.specular, doSpecular);
                 payload.emission            = emission;                
                 payload.bounceIndexOpaque   = payload.bounceIndexOpaque + 1;
                 payload.bounceRayOrigin     = worldPosition + K_RAY_ORIGIN_PUSH_OFF * worldFaceNormal;
@@ -167,6 +167,8 @@ Shader "PathTracing/StandardInstanced"
 
                 payload.meta.normal = worldNormal;
                 payload.meta.albedo = albedo;
+                payload.meta.emission = emission;
+                payload.meta.specular = instanceData.specular;
             }
 
             ENDHLSL
