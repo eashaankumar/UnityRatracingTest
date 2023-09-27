@@ -1760,6 +1760,58 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+--- !u!1 &1399133795
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1399133797}
+  - component: {fileID: 1399133796}
+  m_Layer: 0
+  m_Name: World Generator
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1399133796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1399133795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e14f10210687a20458f6238293dbd17e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  seed: 34234
+  spawnRadiusMinMax:
+    x: 0
+    y: 1000
+  spawnSizeMinMax:
+    x: 0.1
+    y: 0.5
+  numVoxels: 100000
+--- !u!4 &1399133797
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1399133795}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1422248393
 GameObject:
   m_ObjectHideFlags: 0
@@ -2180,6 +2232,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   physicsMaster: {fileID: 664732257}
+  worldGenerator: {fileID: 1399133796}
+  simulationType: 1
   trainDataset: {fileID: 36863695}
   topColor: {r: 0, g: 0.6862745, b: 1, a: 0}
   bottomColor: {r: 1, g: 1, b: 1, a: 0}
@@ -2644,6 +2698,7 @@ SceneRoots:
   - {fileID: 1555959822}
   - {fileID: 432551623}
   - {fileID: 664732256}
+  - {fileID: 1399133797}
   - {fileID: 1940622387}
   - {fileID: 1696371106}
   - {fileID: 36863696}

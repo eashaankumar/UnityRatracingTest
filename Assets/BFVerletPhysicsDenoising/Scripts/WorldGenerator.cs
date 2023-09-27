@@ -27,6 +27,7 @@ public class WorldGenerator : MonoBehaviour
     IEnumerator Start()
     {
         isReady = false;
+        #region assembler
         VerletPhysicsRendererAssembler assembler = new VerletPhysicsRendererAssembler((int)numVoxels, (int)numVoxels, Allocator.TempJob);
         GenerateWorldJob generateWorldJob = new GenerateWorldJob
         {
@@ -36,12 +37,16 @@ public class WorldGenerator : MonoBehaviour
             spawnRadius = spawnRadiusMinMax,
             spawnSize = spawnSizeMinMax
         };
-        JobHandle genHandle = generateWorldJob.Schedule(assembler.standardMaterialAssembly.Length, 64);
+        JobHandle genHandle = generateWorldJob.Schedule((int)numVoxels, 64);
         yield return new WaitUntil(() => genHandle.IsCompleted);
         genHandle.Complete();
+        #endregion
 
         if (rendererCache.IsCreated) rendererCache.Dispose();
+
+        #region cache
         rendererCache = new VoxelInstancedRenderer(assembler.standardMaterialAssembly.Length, assembler.glassMaterialAssembly.Length, Allocator.Persistent);
+        Debug.Log(assembler.standardMaterialAssembly.Length + " " + assembler.glassMaterialAssembly.Length);
         PopulateRendererCacheJob rendererCacheJob = new PopulateRendererCacheJob
         {
             assembler = assembler,
@@ -50,6 +55,7 @@ public class WorldGenerator : MonoBehaviour
         JobHandle cacheHandle = rendererCacheJob.Schedule(assembler.standardMaterialAssembly.Length + assembler.glassMaterialAssembly.Length, 64);
         yield return new WaitUntil(() => cacheHandle.IsCompleted);
         cacheHandle.Complete();
+        #endregion
 
         assembler.Dispose();
         isReady = true;
@@ -89,9 +95,9 @@ public class WorldGenerator : MonoBehaviour
                     {
                         material = new StandardMaterialData
                         {
-                            albedo = RandColor(),
+                            albedo = RandColor(index),
                             specular = RandSpecular(),
-                            emission = RandColor() * random.NextFloat(0f, 1f),
+                            emission = RandColor(index) * random.NextFloat(0f, 1f),
                             smoothness = 0.5f,
                             metallic = 0.2f,
                             ior = 0.6f
@@ -107,8 +113,8 @@ public class WorldGenerator : MonoBehaviour
                     {
                         material= new GlassMaterialData
                         {
-                            albedo = RandColor(),
-                            emission = RandColor() * random.NextFloat(0f, 1.1f),
+                            albedo = RandColor(index),
+                            emission = RandColor(index) * random.NextFloat(0f, 1.1f),
                             ior = random.NextFloat(1.0f, 2.8f),
                             roughness = random.NextFloat(0f, 0.5f),
                             extinctionCoeff = 0,
@@ -120,9 +126,9 @@ public class WorldGenerator : MonoBehaviour
             }
         }
 
-        float3 RandColor()
+        float3 RandColor(int index)
         {
-            return new float3(math.sin(Time.time) * 0.5f + 0.5f, math.cos(Time.time) * 0.5f + 0.5f, math.tan(Time.time) * 0.5f + 0.5f);
+            return new float3(math.sin(index) * 0.5f + 0.5f, math.cos(index) * 0.5f + 0.5f, math.tan(index) * 0.5f + 0.5f);
         }
 
         float3 RandSpecular()

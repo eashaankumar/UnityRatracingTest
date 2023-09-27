@@ -13,14 +13,24 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 {
     public class DatasetRenderer : MonoBehaviour
     {
+        [Header("Renderer Cache Generator")]
         [SerializeField]
         BFVerletPhysicsMaster physicsMaster;
         [SerializeField]
+        WorldGenerator worldGenerator;
+        [SerializeField]
+        SimulationType simulationType;
+
+        [SerializeField]
         Dataset trainDataset;
+
+        [Header("Skybox")]
         [SerializeField]
         UnityEngine.Color topColor;
         [SerializeField]
         UnityEngine.Color bottomColor;
+
+        [Header("UI")]
         [SerializeField]
         RawImages images;
         [SerializeField]
@@ -51,7 +61,13 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL
         }
 
+        [System.Serializable]
+        public enum SimulationType
+        {
+            VERLET_PHYSICS, WORLD_GENERATOR
+        }
 
+        [Header("Ray Tracing")]
         public RayTracingShader rayTracingShader = null;
 
         //public Cubemap envTexture = null;
@@ -254,13 +270,18 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             if (prevBounceCountTransparent != bounceCountTransparent)
                 convergenceStep = 0;
 
-            convergenceStep = 0;
-
             rayTracingAccelerationStructure.ClearInstances();
 
             #region Instancing
-
-            VoxelInstancedRenderer vRenderer = physicsMaster.Tick();
+            if (!worldGenerator.IsReady) return;
+            VoxelInstancedRenderer vRenderer;
+            if (simulationType == SimulationType.VERLET_PHYSICS)
+            {
+                convergenceStep = 0;
+                vRenderer = physicsMaster.Tick();
+            }
+            else if (simulationType == SimulationType.WORLD_GENERATOR) vRenderer = worldGenerator.RendererCache;
+            else throw new System.Exception($"Invalid Renderer Cache Provider {simulationType}");
             GraphicsBuffer stadardMaterialdata = null, glassMaterialData = null;
             if (vRenderer.standardMaterialData.Length > 0)
             {
@@ -288,7 +309,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 rayTracingAccelerationStructure.AddInstances(config, vRenderer.glassMatrices);
             }
-            vRenderer.Dispose();
+            if (simulationType == SimulationType.VERLET_PHYSICS) vRenderer.Dispose();
             #endregion
 
             // Not really needed per frame if the scene is static.
