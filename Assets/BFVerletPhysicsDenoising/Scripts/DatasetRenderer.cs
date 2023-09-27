@@ -260,7 +260,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
             #region Instancing
 
-            VerletPhysicsRenderer vRenderer = physicsMaster.Tick();
+            VoxelInstancedRenderer vRenderer = physicsMaster.Tick();
             GraphicsBuffer stadardMaterialdata = null, glassMaterialData = null;
             if (vRenderer.standardMaterialData.Length > 0)
             {

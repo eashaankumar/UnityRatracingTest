@@ -96,7 +96,7 @@ namespace BarelyFunctional.VerletPhysics
             return new float3(0.5f,0.5f, 0.5f);
         }
 
-        public VerletPhysicsRenderer Tick()
+        public VoxelInstancedRenderer Tick()
         {
             float time = Time.time;
             if (time - lastTick >= simDt)
@@ -183,7 +183,7 @@ namespace BarelyFunctional.VerletPhysics
             physicsToRendererAssemblerJob.Schedule(verletWorld.ParticleCount, 64).Complete();
 
             // convert to renderer
-            VerletPhysicsRenderer vrenderer = new VerletPhysicsRenderer(voxelWorld.StandardVoxels, voxelWorld.GlassVoxels, Allocator.TempJob);
+            VoxelInstancedRenderer vrenderer = new VoxelInstancedRenderer(voxelWorld.StandardVoxels, voxelWorld.GlassVoxels, Allocator.TempJob);
             VerletPhysicsToRendererConverterJob converterJob = new VerletPhysicsToRendererConverterJob
             {
                 renderer = vrenderer,
@@ -440,7 +440,7 @@ namespace BarelyFunctional.VerletPhysics
     {
         [ReadOnly] public VerletPhysicsRendererAssembler rendererAssembler;
         [NativeDisableParallelForRestriction]
-        public VerletPhysicsRenderer renderer;
+        public VoxelInstancedRenderer renderer;
 
         public void Execute(int index)
         {

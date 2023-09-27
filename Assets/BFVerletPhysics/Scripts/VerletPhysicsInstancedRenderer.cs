@@ -181,7 +181,7 @@ namespace BarelyFunctional.Renderer
 
             #region Instancing
 
-            VerletPhysicsRenderer vRenderer = physicsMaster.Tick();
+            VoxelInstancedRenderer vRenderer = physicsMaster.Tick();
             /*vRenderer.data[0] = new Data { color = new float3(1, 0, 0), emission = Mathf.Sin(Time.time) * 0.5f + 0.5f };
             vRenderer.data[1] = new Data { color = new float3(1, 1, 0), emission = Mathf.Cos(Time.time) * 0.5f + 0.5f };
             vRenderer.matrices[0] = float4x4.TRS(target.position, target.rotation, target.localScale);

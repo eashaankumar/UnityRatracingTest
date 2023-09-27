@@ -321,19 +321,21 @@ namespace BarelyFunctional.Structs
         }
     }
 
-    public struct VerletPhysicsRenderer : System.IDisposable
+    public struct VoxelInstancedRenderer : System.IDisposable
     {
         public NativeArray<StandardMaterialData> standardMaterialData;
         public NativeArray<GlassMaterialData> glassMaterialData;
         public NativeArray<Matrix4x4> standardMatrices;
         public NativeArray<Matrix4x4> glassMatrices;
+        private bool isCreated;
 
-        public VerletPhysicsRenderer(int standardVoxles, int glassVoxels, Allocator alloc)
+        public VoxelInstancedRenderer(int standardVoxles, int glassVoxels, Allocator alloc)
         {
             standardMaterialData = new NativeArray<StandardMaterialData>(standardVoxles, alloc);
             glassMaterialData = new NativeArray<GlassMaterialData>(glassVoxels, alloc);
             standardMatrices = new NativeArray<Matrix4x4>(standardVoxles, alloc);
             glassMatrices = new NativeArray<Matrix4x4>(glassVoxels, alloc);
+            isCreated = true;
         }
 
         public void Dispose()
@@ -341,7 +343,13 @@ namespace BarelyFunctional.Structs
             if (standardMaterialData.IsCreated) standardMaterialData.Dispose();
             if (glassMaterialData.IsCreated) glassMaterialData.Dispose();
             if (standardMatrices.IsCreated) standardMatrices.Dispose();
-            if (glassMatrices.IsCreated) glassMatrices.Dispose();   
+            if (glassMatrices.IsCreated) glassMatrices.Dispose();
+            isCreated = false;
+        }
+
+        public bool IsCreated
+        {
+            get { return isCreated; }
         }
     }
 
@@ -362,6 +370,6 @@ namespace BarelyFunctional.Interfaces
 {
     public interface IVerletPhysicsRenderer
     {
-        public void SetRenderer(VerletPhysicsRenderer readyToBeCopied);
+        public void SetRenderer(VoxelInstancedRenderer readyToBeCopied);
     }
 }
