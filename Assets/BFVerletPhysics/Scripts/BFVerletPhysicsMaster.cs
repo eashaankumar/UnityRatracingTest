@@ -26,7 +26,7 @@ namespace BarelyFunctional.VerletPhysics
         //VerletPhysicsSimulatorJob simulatorJob;
         VerletPhysicsWorld verletWorld;
         VoxelWorld voxelWorld;
-        VerletPhysicsToRendererConverterJob physicsToRendererConverterJob;
+        VerletPhysicsToRendererAssemblerJob physicsToRendererAssemblerJob;
         VerletPhysicsHasherJob verletPhysicsHasher;
         VerletPhysicsCollisionsJob verletPhysicsCollisions;
         float lastTick;
@@ -42,10 +42,10 @@ namespace BarelyFunctional.VerletPhysics
         private void Awake()
         {
             verletWorld = new VerletPhysicsWorld(gravity, Allocator.Persistent);
-            voxelWorld = new VoxelWorld(Allocator.Persistent);
+            voxelWorld = new VoxelWorld(12424, Allocator.Persistent);
             //simulatorJob = new VerletPhysicsSimulatorJob();
             verletPhysicsHasher = new VerletPhysicsHasherJob();
-            physicsToRendererConverterJob = new VerletPhysicsToRendererConverterJob();
+            physicsToRendererAssemblerJob = new VerletPhysicsToRendererAssemblerJob();
             verletPhysicsCollisions = new VerletPhysicsCollisionsJob();
             random = new Unity.Mathematics.Random(1224214);
 
@@ -59,23 +59,41 @@ namespace BarelyFunctional.VerletPhysics
             {
                 for (int z = -size.y / 2; z <= size.y / 2; z++)
                 {
+                    float voxelSize = 2.0f;
                     verletWorld.AddParticle(
                     new VerletParticle
                     {
                         drag = 0,
                         mass = 1.0,
-                        radius = 1,
+                        radius = voxelSize / 2,
                         pos_current = new double3(x, -10, z) * 2,
                         freeze = true,
                     });
                     voxelWorld.AddVoxel(
-                        new Voxel
-                        (
-                            new Structs.Color(1, 1, 1),
-                            math.abs(x) % 4 == 0 && math.abs(z) % 4 == 0 ? 0.1f : 0
-                        )) ;
+                        voxelSize,
+                        new StandardMaterialData
+                        {
+                            albedo = 1,
+                            specular = 0,
+                            emission = (x % 2 == 0 && z % 2 == 0) ? 1 : 0,
+                            smoothness = 0.5f,
+                            metallic = 0.2f,
+                            ior = 0.6f
+                        },
+                        (uint)(Time.time * 1000)
+                        );
                 }
             }
+        }
+
+        float3 RandColor()
+        {
+            return new float3(math.sin(Time.time) * 0.5f + 0.5f, math.cos(Time.time) * 0.5f + 0.5f, math.tan(Time.time) * 0.5f + 0.5f);
+        }
+
+        float3 RandSpecular()
+        {
+            return new float3(0.5f,0.5f, 0.5f);
         }
 
         public VerletPhysicsRenderer Tick()
@@ -85,6 +103,7 @@ namespace BarelyFunctional.VerletPhysics
             {
                 if (random.NextFloat(0f, 1f) < 0.1f)
                 {
+                    float voxelSize = random.NextFloat(0.75f, 1.0f);
                     double3 pos = new double3(math.sin(verletWorld.ParticleCount * 2), 0, math.cos(verletWorld.ParticleCount * 2)) * 5;
                     verletWorld.AddParticle(
                         new VerletParticle
@@ -93,14 +112,41 @@ namespace BarelyFunctional.VerletPhysics
                             mass = 1.0,
                             pos_current = pos + new double3(0,0.001,0),
                             pos_old = pos,
-                            radius = math.clamp(random.NextDouble(), 0.75, 1.0),
+                            radius = voxelSize/2f,
                         });
-                    voxelWorld.AddVoxel(
-                        new Voxel
-                        (
-                            new Structs.Color(math.sin(Time.time) * 0.5f + 0.5f, math.cos(Time.time) * 0.5f + 0.5f, math.tan(Time.time) * 0.5f + 0.5f),
-                            random.NextFloat()
-                        ));
+                    VoxelMaterialType type = (VoxelMaterialType)random.NextInt(0, 2);
+                    if (type == VoxelMaterialType.STANDARD)
+                    {
+                        voxelWorld.AddVoxel(
+                            voxelSize,
+                            new StandardMaterialData
+                            {
+                                albedo = RandColor(),
+                                specular = RandSpecular(),
+                                emission = RandColor() * random.NextFloat(0f, 1f),
+                                smoothness = 0.5f,
+                                metallic = 0.2f,
+                                ior = 0.6f
+                            },
+                            (uint)(Time.time * 1000)
+                        );
+                    }
+                    else
+                    {
+                        voxelWorld.AddVoxel(
+                            voxelSize,
+                            new GlassMaterialData
+                            {
+                                albedo = RandColor(),
+                                emission = RandColor() * random.NextFloat(0f, 1.1f),
+                                ior = random.NextFloat(1.0f, 2.8f),
+                                roughness = random.NextFloat(0f, 0.5f),
+                                extinctionCoeff = 0,
+                                flatShading = 0,
+                            },
+                            (uint)(Time.time * 1000)
+                        );
+                    }
                 }
                 verletWorld.worldGravity = gravity;
                 // build physics hash grid
@@ -127,13 +173,25 @@ namespace BarelyFunctional.VerletPhysics
                 hashGrid.Dispose();
             }
 
+            // assemble renderer data
+            VerletPhysicsRendererAssembler vrendererAssembler = new VerletPhysicsRendererAssembler(voxelWorld.StandardVoxels, voxelWorld.GlassVoxels, Allocator.TempJob);
+            physicsToRendererAssemblerJob.verletWorld = verletWorld;
+            physicsToRendererAssemblerJob.voxelWorld = voxelWorld;
+            physicsToRendererAssemblerJob.standardMaterialAssembly = vrendererAssembler.standardMaterialAssembly.AsParallelWriter();
+            physicsToRendererAssemblerJob.glassMaterialAssembly = vrendererAssembler.glassMaterialAssembly.AsParallelWriter();
+            physicsToRendererAssemblerJob.random = random;
+            physicsToRendererAssemblerJob.Schedule(verletWorld.ParticleCount, 64).Complete();
+
             // convert to renderer
-            VerletPhysicsRenderer vrenderer = new VerletPhysicsRenderer(verletWorld.ParticleCount, Allocator.TempJob);
-            physicsToRendererConverterJob.verletWorld = verletWorld;
-            physicsToRendererConverterJob.voxelWorld = voxelWorld;
-            physicsToRendererConverterJob.renderer = vrenderer;
-            physicsToRendererConverterJob.random = random;
-            physicsToRendererConverterJob.Schedule(verletWorld.ParticleCount, 64).Complete();
+            VerletPhysicsRenderer vrenderer = new VerletPhysicsRenderer(voxelWorld.StandardVoxels, voxelWorld.GlassVoxels, Allocator.TempJob);
+            VerletPhysicsToRendererConverterJob converterJob = new VerletPhysicsToRendererConverterJob
+            {
+                renderer = vrenderer,
+                rendererAssembler = vrendererAssembler,
+            };
+            converterJob.Schedule(verletWorld.ParticleCount, 64).Complete();
+
+            vrendererAssembler.Dispose();
 
             count = verletWorld.ParticleCount;
             lastTick = time;
@@ -340,28 +398,66 @@ namespace BarelyFunctional.VerletPhysics
     }
 
     [BurstCompile]
-    public struct VerletPhysicsToRendererConverterJob : IJobParallelFor
+    public struct VerletPhysicsToRendererAssemblerJob : IJobParallelFor
     {
         [ReadOnly] public VerletPhysicsWorld verletWorld;
         [ReadOnly] public VoxelWorld voxelWorld;
         [ReadOnly] public Unity.Mathematics.Random random;
+        [NativeDisableParallelForRestriction]
+        public NativeList<StandardVoxelAssembledData>.ParallelWriter standardMaterialAssembly;
+        [NativeDisableParallelForRestriction]
+        public NativeList<GlassVoxelAssembledData>.ParallelWriter glassMaterialAssembly;
+
+        public void Execute(int index)
+        {
+            VerletParticle p = verletWorld.GetParticle(index);
+            float3 pos = new float3((float)p.pos_current.x, (float)p.pos_current.y, (float)p.pos_current.z);
+
+            Voxel v = voxelWorld.GetVoxel(index);
+            float4x4 trs = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1) * v.size);
+
+
+            if (v.type == VoxelMaterialType.STANDARD)
+            {
+                standardMaterialAssembly.AddNoResize(new StandardVoxelAssembledData{
+                    material= voxelWorld.GetStandardMaterial(v.id),
+                    trs = trs
+                });
+            }
+            else if (v.type == VoxelMaterialType.GLASS)
+            {
+                glassMaterialAssembly.AddNoResize(new GlassVoxelAssembledData
+                {
+                    material = voxelWorld.GetGlassMaterial(v.id),
+                    trs = trs
+                });
+            }
+        }
+    }
+
+    [BurstCompile]
+    public struct VerletPhysicsToRendererConverterJob : IJobParallelFor
+    {
+        [ReadOnly] public VerletPhysicsRendererAssembler rendererAssembler;
+        [NativeDisableParallelForRestriction]
         public VerletPhysicsRenderer renderer;
 
         public void Execute(int index)
         {
-            Voxel v = voxelWorld.GetVoxel(index);
-            renderer.data[index] = new Data()
+            if (index < rendererAssembler.standardMaterialAssembly.Length)
             {
-                color = v.color.Float3(),
-                emission = v.glow / 255f, 
-            };
-
-            VerletParticle p = verletWorld.GetParticle(index);
-            float3 pos = new float3((float)p.pos_current.x, (float)p.pos_current.y, (float)p.pos_current.z);
-
-            // TODO: voxel size should come from Voxel struct, not verlet object
-            renderer.matrices[index] = float4x4.TRS(pos, quaternion.identity, new float3(1, 1, 1) * (float)p.radius * 2);
+                StandardVoxelAssembledData assembly = rendererAssembler.standardMaterialAssembly[index];
+                renderer.standardMatrices[index] = assembly.trs;
+                renderer.standardMaterialData[index] = assembly.material;
+            }
+            else if (index < rendererAssembler.standardMaterialAssembly.Length + rendererAssembler.glassMaterialAssembly.Length)
+            {
+                int idx = index - rendererAssembler.standardMaterialAssembly.Length;
+                if (idx < 0 || idx >= rendererAssembler.glassMaterialAssembly.Length) return;
+                GlassVoxelAssembledData assembly = rendererAssembler.glassMaterialAssembly[idx];
+                renderer.glassMatrices[idx] = assembly.trs;
+                renderer.glassMaterialData[idx] = assembly.material;
+            }
         }
     }
-
 }

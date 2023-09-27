@@ -36,8 +36,6 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             [SerializeField]
             public RawImage albedoImage;
             [SerializeField]
-            public RawImage shapeImage;
-            [SerializeField]
             public RawImage emissionImage;
             [SerializeField]
             public RawImage materialImage;
@@ -50,7 +48,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         [System.Serializable]
         public enum ImageType
         {
-            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, SHAPE, EMISSION, MATERIAL
+            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL
         }
 
 
@@ -66,6 +64,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         public Mesh mesh;
         public Material material;
+        public Material glassMaterial;
 
         public Transform target;
 
@@ -79,8 +78,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         private uint prevBounceCountTransparent = 0;
 
         private RenderTexture noisyRadianceRT = null, convergedRT = null;
-        private RenderTexture normalRT = null, depthRT = null, albedoRT = null, shapeRT = null, emissionRT = null,
-            materialRT = null;
+        private RenderTexture normalRT = null, depthRT = null, albedoRT = null, emissionRT = null,
+            specularRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
@@ -114,9 +113,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 ReleaseRT(ref normalRT);
                 ReleaseRT(ref depthRT);
                 ReleaseRT(ref albedoRT);
-                ReleaseRT(ref shapeRT);
                 ReleaseRT(ref emissionRT);
-                ReleaseRT(ref materialRT);
+                ReleaseRT(ref specularRT);
             }
 
             cameraWidth = 0;
@@ -159,9 +157,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     ReleaseRT(ref normalRT);
                     ReleaseRT(ref depthRT);
                     ReleaseRT(ref albedoRT);
-                    ReleaseRT(ref shapeRT);
                     ReleaseRT(ref emissionRT);
-                    ReleaseRT(ref materialRT);
+                    ReleaseRT(ref specularRT);
                 }
 
                 RenderTextureDescriptor rtDesc4Channel = new RenderTextureDescriptor()
@@ -187,11 +184,9 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 CreateRenderTexture(ref depthRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref shapeRT, rtDesc4Channel);
-
                 CreateRenderTexture(ref emissionRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref materialRT, rtDesc4Channel);
+                CreateRenderTexture(ref specularRT, rtDesc4Channel);
 
                 cameraWidth = (uint)PixelWidth;
                 cameraHeight = (uint)PixelHeight; 
@@ -266,20 +261,32 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             #region Instancing
 
             VerletPhysicsRenderer vRenderer = physicsMaster.Tick();
-            GraphicsBuffer data = null;
-            if (vRenderer.data.Length > 0)
+            GraphicsBuffer stadardMaterialdata = null, glassMaterialData = null;
+            if (vRenderer.standardMaterialData.Length > 0)
             {
-                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.data.Length, Data.Size);
-                data.SetData(vRenderer.data);
+                stadardMaterialdata = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.standardMaterialData.Length, StandardMaterialData.Size);
+                stadardMaterialdata.SetData(vRenderer.standardMaterialData);
 
                 RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);
-
                 config.materialProperties = new MaterialPropertyBlock();
-                config.materialProperties.SetBuffer("g_Data", data);
+                config.materialProperties.SetBuffer("g_Data", stadardMaterialdata);
                 config.material.enableInstancing = true;
 
-                rayTracingAccelerationStructure.AddInstances(config, vRenderer.matrices);
+                rayTracingAccelerationStructure.AddInstances(config, vRenderer.standardMatrices);
 
+            }
+
+            if (vRenderer.glassMaterialData.Length > 0)
+            {
+                glassMaterialData = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.glassMaterialData.Length, GlassMaterialData.Size);
+                glassMaterialData.SetData(vRenderer.glassMaterialData);
+
+                RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, glassMaterial);
+                config.materialProperties = new MaterialPropertyBlock();
+                config.materialProperties.SetBuffer("g_Data", glassMaterialData);
+                config.material.enableInstancing = true;
+
+                rayTracingAccelerationStructure.AddInstances(config, vRenderer.glassMatrices);
             }
             vRenderer.Dispose();
             #endregion
@@ -308,9 +315,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Normal"), normalRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Shape"), shapeRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Material"), materialRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
 
             rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
 
@@ -329,6 +335,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 convergenceStep++;
             }
 
+            print(imageType);
+
             switch (imageType)
             {
                 case ImageType.NOISY:
@@ -346,33 +354,30 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 case ImageType.DEPTH:
                     Graphics.Blit(depthRT, dest);
                     break;
-                case ImageType.SHAPE:
-                    Graphics.Blit(shapeRT, dest);
-                    break;
                 case ImageType.EMISSION:
                     Graphics.Blit(emissionRT, dest);
                     break;
                 case ImageType.MATERIAL:
-                    Graphics.Blit(materialRT, dest);
+                    Graphics.Blit(specularRT, dest);
                     break;
             }
 
             images.normalImage.texture = normalRT;
             images.albedoImage.texture = albedoRT;
             images.depthImage.texture = depthRT;
-            images.shapeImage.texture = shapeRT;
             images.emissionImage.texture = emissionRT;
-            images.materialImage.texture = materialRT;
+            images.materialImage.texture = specularRT;
             images.noisyImage.texture = noisyRadianceRT;
             images.convergedImage.texture = convergedRT;
 
             prevCameraMatrix = Camera.main.cameraToWorldMatrix;
             prevBounceCountOpaque = bounceCountOpaque;
             prevBounceCountTransparent = bounceCountTransparent;
-            if (data != null) data.Release();
+            if (stadardMaterialdata != null) stadardMaterialdata.Release();
+            if (glassMaterialData != null) glassMaterialData.Release();
         }
 
-         
+
         public void SetTexture(int imageType)
         {
             this.imageType = (ImageType) imageType;

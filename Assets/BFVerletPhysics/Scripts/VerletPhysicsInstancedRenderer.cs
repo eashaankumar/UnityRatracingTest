@@ -187,10 +187,10 @@ namespace BarelyFunctional.Renderer
             vRenderer.matrices[0] = float4x4.TRS(target.position, target.rotation, target.localScale);
             vRenderer.matrices[1] = float4x4.TRS(target.position + target.forward * 2, target.rotation, target.localScale);*/
             GraphicsBuffer data = null;
-            if (vRenderer.data.Length > 0)
+            if (vRenderer.standardMaterialData.Length > 0)
             {
-                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.data.Length, 4 * sizeof(float));
-                data.SetData(vRenderer.data);
+                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.standardMaterialData.Length, 4 * sizeof(float));
+                data.SetData(vRenderer.standardMaterialData);
 
                 RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);
 
@@ -198,10 +198,10 @@ namespace BarelyFunctional.Renderer
                 config.materialProperties.SetBuffer("g_Data", data);
                 config.material.enableInstancing = true;
 
-                rayTracingAccelerationStructure.AddInstances(config, vRenderer.matrices);
+                rayTracingAccelerationStructure.AddInstances(config, vRenderer.standardMatrices);
 
             }
-            text.text = $"Voxels {vRenderer.data.Length}\n{SystemInfo.graphicsDeviceName}\n{SystemInfo.graphicsDeviceType}\n{rayTracingOutput.width}x{rayTracingOutput.height}";
+            text.text = $"Voxels {vRenderer.standardMaterialData.Length}\n{SystemInfo.graphicsDeviceName}\n{SystemInfo.graphicsDeviceType}\n{rayTracingOutput.width}x{rayTracingOutput.height}";
 
             vRenderer.Dispose();
             #endregion

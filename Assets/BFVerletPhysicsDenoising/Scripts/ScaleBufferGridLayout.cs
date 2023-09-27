@@ -9,6 +9,8 @@ public class ScaleBufferGridLayout : MonoBehaviour
     GridLayoutGroup group;
     [SerializeField]
     int numCellsWidth;
+    [SerializeField]
+    Vector2Int targetRes;
     // Start is called before the first frame update
     void Start()
     {
@@ -18,7 +20,7 @@ public class ScaleBufferGridLayout : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        float ratio = 480f / 360;
+        float ratio = (float)targetRes.y / targetRes.x;
         int width = Screen.width / numCellsWidth;
         int height = (int)(width / ratio);
         group.cellSize = new Vector2(width, height);

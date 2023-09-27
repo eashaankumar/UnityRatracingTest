@@ -157,19 +157,26 @@ namespace BarelyFunctional.Structs
         }
     }
 
-
     public struct VoxelWorld : System.IDisposable
     {
         NativeList<Voxel> voxels;
+        NativeHashMap<uint, StandardMaterialData> standardMaterialData;
+        NativeHashMap<uint, GlassMaterialData> glassMaterialData;
+        Unity.Mathematics.Random idGenerator;
 
-        public VoxelWorld(Allocator a)
+        public VoxelWorld(uint seed, Allocator a)
         {
             voxels = new NativeList<Voxel>(a);
+            glassMaterialData = new NativeHashMap<uint, GlassMaterialData>(1000000, a);
+            standardMaterialData = new NativeHashMap<uint, StandardMaterialData>(1000000, a);
+            idGenerator = new Unity.Mathematics.Random(seed);
         }
 
         public void Dispose()
         {
             if (voxels.IsCreated) voxels.Dispose();
+            if (glassMaterialData.IsCreated) glassMaterialData.Dispose();
+            if (standardMaterialData.IsCreated) standardMaterialData.Dispose();
         }
 
         public Voxel GetVoxel(int i)
@@ -177,75 +184,177 @@ namespace BarelyFunctional.Structs
             return voxels[i];
         }
 
-        public void AddVoxel(Voxel v)
+        public int GlassVoxels
         {
-            if (voxels.IsCreated) voxels.Add(v);
+            get
+            {
+                return glassMaterialData.Count();
+            }
+        }
+
+        public int StandardVoxels
+        {
+            get
+            {
+                return standardMaterialData.Count();
+            }
+        }
+
+        public StandardMaterialData GetStandardMaterial(uint voxel)
+        {
+            return standardMaterialData[voxel];
+        }
+
+        public GlassMaterialData GetGlassMaterial(uint voxel)
+        {
+            return glassMaterialData[voxel];
+        }
+
+        public void AddVoxel(float size, StandardMaterialData material, uint time)
+        {
+            if (voxels.IsCreated && standardMaterialData.IsCreated)
+            {
+                uint id = time + idGenerator.NextUInt();
+                if (standardMaterialData.TryAdd(id, material))
+                {
+                    Voxel v = new Voxel
+                    {
+                        type = VoxelMaterialType.STANDARD,
+                        id = id,
+                        size = size,
+                    };
+                    voxels.Add(v);
+                }
+                else
+                {
+                    throw new System.Exception($"Standard Material data already exists for voxel {id}");
+                }
+            }
+        }
+
+        public void AddVoxel(float size, GlassMaterialData material, uint time)
+        {
+            if (voxels.IsCreated && glassMaterialData.IsCreated)
+            {
+                uint id = time + idGenerator.NextUInt();
+                if (glassMaterialData.TryAdd(id, material))
+                {
+                    Voxel v = new Voxel
+                    {
+                        type = VoxelMaterialType.GLASS,
+                        id = id,
+                        size = size,
+                    };
+                    voxels.Add(v);
+                }
+                else
+                {
+                    throw new System.Exception($"Glass Material data already exists for voxel {id}");
+                }
+            }
         }
     }
 
-    public struct Data
+    public struct StandardMaterialData
     {
-        public float3 color;
+        public float3 albedo;
         public float3 specular;
-        public float3 smoothness;
-        public float3 metallic;
         public float3 emission;
+        public float smoothness;
+        public float metallic;
         public float ior;
 
         public static int Size
         {
             get
             {
-                return (3 + 3 + 3 + 3 + 3 + 1) * sizeof(float);
+                return (3 + 3 + 3 + 1 + 1 + 1) * sizeof(float);
             }
         }
     };
 
-    public struct VerletPhysicsRenderer : System.IDisposable
+    public struct GlassMaterialData
     {
-        public NativeArray<Data> data;
-        public NativeArray<Matrix4x4> matrices;
+        public float3 albedo;
+        public float3 emission;
+        public float ior; // 1.0, 2.8
+        public float roughness; // 0, 0.5
+        public float extinctionCoeff; // 0, 1 (technically, 0, 20 but that explodes the colors)
+        public float flatShading; // bool
 
-        public VerletPhysicsRenderer(int count, Allocator alloc)
+        public static int Size
         {
-            data = new NativeArray<Data>(count, alloc);
-            matrices = new NativeArray<Matrix4x4>(count, alloc);
+            get
+            {
+                return (3 + 3 + 1 + 1 + 1 + 1) * sizeof(float);
+            }
+        }
+    }
+
+    public struct StandardVoxelAssembledData
+    {
+        public StandardMaterialData material;
+        public Matrix4x4 trs;
+    }
+
+    public struct GlassVoxelAssembledData
+    {
+        public GlassMaterialData material;
+        public Matrix4x4 trs;
+    }
+
+    public struct VerletPhysicsRendererAssembler : System.IDisposable
+    {
+        public NativeList<StandardVoxelAssembledData> standardMaterialAssembly;
+        public NativeList<GlassVoxelAssembledData> glassMaterialAssembly;
+
+        public VerletPhysicsRendererAssembler(int standardVoxels, int glassVoxels, Allocator alloc)
+        {
+            standardMaterialAssembly = new NativeList<StandardVoxelAssembledData>(standardVoxels, alloc);
+            glassMaterialAssembly = new NativeList<GlassVoxelAssembledData>(glassVoxels, alloc);
         }
 
         public void Dispose()
         {
-            if (data.IsCreated) data.Dispose();
-            if (matrices.IsCreated) matrices.Dispose();
+            if (standardMaterialAssembly.IsCreated) standardMaterialAssembly.Dispose();
+            if (glassMaterialAssembly.IsCreated) glassMaterialAssembly.Dispose();
         }
     }
 
-    public struct Color
+    public struct VerletPhysicsRenderer : System.IDisposable
     {
-        public byte r, g, b;
+        public NativeArray<StandardMaterialData> standardMaterialData;
+        public NativeArray<GlassMaterialData> glassMaterialData;
+        public NativeArray<Matrix4x4> standardMatrices;
+        public NativeArray<Matrix4x4> glassMatrices;
 
-        public Color (float _r, float _g, float _b)
+        public VerletPhysicsRenderer(int standardVoxles, int glassVoxels, Allocator alloc)
         {
-            r = (byte)(_r * 255);
-            g = (byte)(_g * 255);
-            b = (byte)(_b * 255);
+            standardMaterialData = new NativeArray<StandardMaterialData>(standardVoxles, alloc);
+            glassMaterialData = new NativeArray<GlassMaterialData>(glassVoxels, alloc);
+            standardMatrices = new NativeArray<Matrix4x4>(standardVoxles, alloc);
+            glassMatrices = new NativeArray<Matrix4x4>(glassVoxels, alloc);
         }
 
-        public float3 Float3()
+        public void Dispose()
         {
-            return new float3(r / 255f, g / 255f, b / 255f);
+            if (standardMaterialData.IsCreated) standardMaterialData.Dispose();
+            if (glassMaterialData.IsCreated) glassMaterialData.Dispose();
+            if (standardMatrices.IsCreated) standardMatrices.Dispose();
+            if (glassMatrices.IsCreated) glassMatrices.Dispose();   
         }
+    }
+
+    public enum VoxelMaterialType
+    {
+        STANDARD, GLASS
     }
 
     public struct Voxel
     {
-        public Color color;
-        public byte glow;
-
-        public Voxel(Color _c, float _g)
-        {
-            color = _c;
-            glow = (byte)(_g * 255);
-        }
+        public VoxelMaterialType type;
+        public uint id;
+        public float size;
     }
 }
 

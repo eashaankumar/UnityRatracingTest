@@ -5,12 +5,6 @@ Shader "PathTracing/StandardInstanced"
         _MainTex("Albedo", 2D) = "white" {}
 
         _EmissionTex("Emission", 2D) = "white" {}
-
-        _Smoothness("Smoothness", Range(0.0, 1.0)) = 0.5
-
-        [Gamma] _Metallic("Metallic", Range(0.0, 1.0)) = 0.0
-
-        _IOR("Index of Refraction", Range(1.0, 2.8)) = 1.5
     }    
     
     SubShader
@@ -42,11 +36,11 @@ Shader "PathTracing/StandardInstanced"
 
             struct Data
             {
-                float3 color;
+                float3 albedo;
                 float3 specular;
-                float3 smoothness;
-                float3 metallic;
                 float3 emission;
+                float smoothness;
+                float metallic;
                 float ior;
             };
 
@@ -59,10 +53,6 @@ Shader "PathTracing/StandardInstanced"
             Texture2D<float4> _EmissionTex;
             float4 _EmissionTex_ST;
             SamplerState sampler__EmissionTex;
-
-            float _Smoothness;
-            float _Metallic;
-            float _IOR;
 
             struct AttributeData
             {
@@ -132,9 +122,9 @@ Shader "PathTracing/StandardInstanced"
 
                 float3 worldNormal = normalize(mul(localNormal, (float3x3)WorldToObject()));
 
-                float fresnelFactor = FresnelReflectAmountOpaque(isFrontFace ? 1 : _IOR, isFrontFace ? _IOR : 1, WorldRayDirection(), worldNormal);
+                float fresnelFactor = FresnelReflectAmountOpaque(isFrontFace ? 1 : instanceData.ior, isFrontFace ? instanceData.ior : 1, WorldRayDirection(), worldNormal);
 
-                float specularChance = lerp(_Metallic, 1, fresnelFactor * _Smoothness);
+                float specularChance = lerp(instanceData.metallic, 1, fresnelFactor * instanceData.smoothness);
 
                 // Calculate whether we are going to do a diffuse or specular reflection ray 
                 float doSpecular = (RandomFloat01(payload.rngState) < specularChance) ? 1 : 0;
@@ -144,7 +134,7 @@ Shader "PathTracing/StandardInstanced"
 
                 float3 specularRayDir = reflect(WorldRayDirection(), worldNormal);
               
-                specularRayDir = normalize(lerp(diffuseRayDir, specularRayDir, _Smoothness));
+                specularRayDir = normalize(lerp(diffuseRayDir, specularRayDir, instanceData.smoothness));
 
                 float3 reflectedRayDir = lerp(diffuseRayDir, specularRayDir, doSpecular);
 
@@ -156,7 +146,7 @@ Shader "PathTracing/StandardInstanced"
 
                 float3 worldFaceNormal = normalize(mul(cross(e0, e1), (float3x3)WorldToObject()));
 
-                float3 albedo = instanceData.color.xyz * _MainTex.SampleLevel(sampler__MainTex, _MainTex_ST.xy * v.uv + _MainTex_ST.zw, 0).xyz;
+                float3 albedo = instanceData.albedo.xyz * _MainTex.SampleLevel(sampler__MainTex, _MainTex_ST.xy * v.uv + _MainTex_ST.zw, 0).xyz;
 
                 payload.k                   = (doSpecular == 1) ? specularChance : 1 - specularChance;
                 payload.albedo              = lerp(albedo, instanceData.specular, doSpecular);
@@ -166,9 +156,9 @@ Shader "PathTracing/StandardInstanced"
                 payload.bounceRayDirection  = reflectedRayDir;
 
                 payload.meta.normal = worldNormal;
-                payload.meta.albedo = albedo;
+                payload.meta.albedo = instanceData.albedo;
                 payload.meta.emission = emission;
-                payload.meta.specular = instanceData.specular;
+                payload.meta.specular = payload.k;
             }
 
             ENDHLSL

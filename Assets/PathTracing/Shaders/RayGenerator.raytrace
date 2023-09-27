@@ -21,9 +21,8 @@ RWTexture2D<float4>             g_Radiance;
 RWTexture2D<float4>             g_Normal;
 RWTexture2D<float4>             g_Albedo;
 RWTexture2D<float4>              g_Depth;
-RWTexture2D<float4>              g_Shape;
 RWTexture2D<float4>              g_Emission;
-RWTexture2D<float4>              g_Material;
+RWTexture2D<float4>              g_Specular;
 
 
 [shader("raygeneration")]
@@ -80,7 +79,6 @@ void MainRayGenShader()
         MetaPayload meta;
         meta.normal                     = float3(0,0,0);
         meta.albedo                     = float3(-1,-1,-1);
-        meta.shape                      = -1;
         meta.emission                   = float3(0, 0, 0);
         meta.specular                   = float3(0,0,0);
         payload.meta                    = meta;
@@ -158,7 +156,6 @@ void MainRayGenShader()
     MetaPayload meta;
     meta.normal                     = float3(0,0,0);
     meta.albedo                     = float3(-1,-1,-1);
-    meta.shape                      = -1;
     meta.emission                   = float3(0, 0, 0);
     meta.specular                   = float3(0,0,0);
     payload.meta                    = meta;
@@ -172,7 +169,7 @@ void MainRayGenShader()
     g_Albedo[launchIndex] = float4(payload.meta.albedo, 1);
     g_Normal[launchIndex] = float4(payload.meta.normal * 0.5 + 0.5, 1);
     g_Emission[launchIndex] = float4(payload.meta.emission, 1);
-    g_Material[launchIndex] = float4(payload.meta.specular, 1);
+    g_Specular[launchIndex] = float4(payload.meta.specular, 1);
 }
 
 [shader("miss")]
@@ -189,4 +186,5 @@ void MainMissShader0(inout RayPayload payload : SV_RayPayload)
     payload.meta.normal = WorldRayDirection();
     payload.meta.albedo = 0;
     payload.meta.emission = payload.emission;
+    payload.meta.specular = 0;
 }

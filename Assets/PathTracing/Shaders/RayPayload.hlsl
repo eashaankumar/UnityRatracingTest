@@ -3,7 +3,6 @@ struct MetaPayload
     float3 normal;
     float3 albedo;
     float3 emission;
-    float shape;
     float3 specular;
 };
 
