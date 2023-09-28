@@ -20,20 +20,33 @@ public class WorldGenerator : MonoBehaviour
 
     VoxelInstancedRenderer rendererCache;
     bool isReady;
+    public Unity.Mathematics.Random random;
 
     public bool IsReady { get { return isReady; } }
     public VoxelInstancedRenderer RendererCache { get { return rendererCache; } }
+
+    public float2 SpawnRadius
+    {
+        get { return spawnRadiusMinMax; }
+    }
+
+    public float2 SpawnSize
+    {
+        get { return spawnSizeMinMax; }
+    }
+
     
     IEnumerator Start()
     {
         isReady = false;
         #region assembler
+        random = new Unity.Mathematics.Random(seed);
         VerletPhysicsRendererAssembler assembler = new VerletPhysicsRendererAssembler((int)numVoxels, (int)numVoxels, Allocator.TempJob);
         GenerateWorldJob generateWorldJob = new GenerateWorldJob
         {
             standardMaterialAssembly = assembler.standardMaterialAssembly.AsParallelWriter(),
             glassMaterialAssembly = assembler.glassMaterialAssembly.AsParallelWriter(),
-            random = new Unity.Mathematics.Random(seed),
+            random = random,
             spawnRadius = spawnRadiusMinMax,
             spawnSize = spawnSizeMinMax
         };

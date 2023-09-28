@@ -15,14 +15,13 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             public int height;
             public string datasetName; // DenoisingDataset
             public int convergence;
+            public uint samples;
 
-            public string BaseFilePathSep
-            {
-                get
-                {
-                    return targetFolder + "\\" + datasetName + Dataset.SEP;
-                }
-            }
+            [Range(1, 100)]
+            public uint bounceCountOpaque;
+
+            [Range(1, 100)]
+            public uint bounceCountTransparent;
 
         }
         [SerializeField]
@@ -50,6 +49,24 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             get { return info.convergence; }
         }
 
+        public uint BounceCountOpaque
+        {
+            get { return info.bounceCountOpaque; }
+        }
+
+        public uint BounceCountTransparent
+        {
+            get { return info.bounceCountTransparent; }
+        }
+
+        public uint Samples
+        {
+            get
+            {
+                return info.samples;
+            }
+        }
+
         private void Awake()
         {
             id = 0;
@@ -58,24 +75,27 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         public void AddData(ref RenderTexture noisy, ref RenderTexture normals, ref RenderTexture depth,
                             ref RenderTexture albedo, ref RenderTexture shape, ref RenderTexture emission,
-                            ref RenderTexture material, ref RenderTexture converged)
+                            ref RenderTexture specular, ref RenderTexture converged)
         {
-            string baseFilePathSep = info.BaseFilePathSep;
-            SaveTexture(ref noisy, baseFilePathSep, "noisy");
-            SaveTexture(ref normals, baseFilePathSep, "normals");
-            SaveTexture(ref depth, baseFilePathSep, "depth");
-            SaveTexture(ref albedo, baseFilePathSep, "albedo");
-            SaveTexture(ref shape, baseFilePathSep, "shape");
-            SaveTexture(ref emission, baseFilePathSep, "emission");
-            SaveTexture(ref material, baseFilePathSep, "material");
-            SaveTexture(ref converged, baseFilePathSep, "converged");
+            string baseFilePath = info.targetFolder + "\\" + id + "\\";
+            SaveTexture(ref noisy, baseFilePath, "noisy");
+            SaveTexture(ref normals, baseFilePath, "normals");
+            SaveTexture(ref depth, baseFilePath, "depth");
+            SaveTexture(ref albedo, baseFilePath, "albedo");
+            SaveTexture(ref shape, baseFilePath, "shape");
+            SaveTexture(ref emission, baseFilePath, "emission");
+            SaveTexture(ref specular, baseFilePath, "specular");
+            SaveTexture(ref converged, baseFilePath, "converged");
             id++;
         }
 
         void SaveTexture(ref RenderTexture rt, string baseFilePathSep, string name)
         {
             byte[] bytes = toTexture2D(ref rt).EncodeToJPG();
-            File.WriteAllBytes(baseFilePathSep + name + SEP + id + ".jpg", bytes);
+            bool exists = System.IO.Directory.Exists(baseFilePathSep);
+            if (!exists)
+                System.IO.Directory.CreateDirectory(baseFilePathSep);
+            File.WriteAllBytes(baseFilePathSep + info.datasetName + Dataset.SEP + name + SEP + id + ".jpg", bytes);
         }
 
         Texture2D toTexture2D(ref RenderTexture rTex)

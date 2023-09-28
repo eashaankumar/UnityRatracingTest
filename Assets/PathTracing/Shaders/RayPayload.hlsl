@@ -4,6 +4,7 @@ struct MetaPayload
     float3 albedo;
     float3 emission;
     float3 specular;
+    float3 shape;
 };
 
 struct RayPayload

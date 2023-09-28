@@ -20,7 +20,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         WorldGenerator worldGenerator;
 
         [SerializeField]
-        Dataset trainDataset;
+        Dataset dataset;
 
         [Header("Skybox")]
         [SerializeField]
@@ -50,29 +50,25 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             [SerializeField]
             public RawImage emissionImage;
             [SerializeField]
-            public RawImage materialImage;
+            public RawImage specularImage;
             [SerializeField]
             public RawImage noisyImage;
             [SerializeField]
             public RawImage convergedImage;
+            [SerializeField]
+            public RawImage shapeImage;
         }
 
         [System.Serializable]
         public enum ImageType
         {
-            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL
+            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL, SHAPE
         }
 
         [Header("Ray Tracing")]
         public RayTracingShader rayTracingShader = null;
 
         //public Cubemap envTexture = null;
-
-        [Range(1, 100)]
-        public uint bounceCountOpaque = 5;
-
-        [Range(1, 100)]
-        public uint bounceCountTransparent = 8;
 
         public Mesh mesh;
         public Material material;
@@ -81,13 +77,9 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         private uint cameraWidth = 0;
         private uint cameraHeight = 0;
 
-        private Matrix4x4 prevCameraMatrix;
-        private uint prevBounceCountOpaque = 0;
-        private uint prevBounceCountTransparent = 0;
-
         private RenderTexture noisyRadianceRT = null, convergedRT = null;
         private RenderTexture normalRT = null, depthRT = null, albedoRT = null, emissionRT = null,
-            specularRT = null;
+            specularRT = null, shapeRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
@@ -126,6 +118,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 ReleaseRT(ref albedoRT);
                 ReleaseRT(ref emissionRT);
                 ReleaseRT(ref specularRT);
+                ReleaseRT(ref shapeRT);
             }
 
             cameraWidth = 0;
@@ -142,7 +135,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         {
             get
             {
-                return trainDataset.PixelWidth;
+                return dataset.PixelWidth;
             }
         }
 
@@ -150,7 +143,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         {
             get
             {
-                return trainDataset.PixelHeight;
+                return dataset.PixelHeight;
             }
         }
 
@@ -170,6 +163,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     ReleaseRT(ref albedoRT);
                     ReleaseRT(ref emissionRT);
                     ReleaseRT(ref specularRT);
+                    ReleaseRT(ref shapeRT);
                 }
 
                 RenderTextureDescriptor rtDesc4Channel = new RenderTextureDescriptor()
@@ -199,6 +193,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 CreateRenderTexture(ref specularRT, rtDesc4Channel);
 
+                CreateRenderTexture(ref shapeRT, rtDesc4Channel);
+
                 cameraWidth = (uint)PixelWidth;
                 cameraHeight = (uint)PixelHeight; 
 
@@ -219,20 +215,6 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             if (stadardMaterialdata != null) stadardMaterialdata.Release();
             if (glassMaterialData != null) glassMaterialData.Release();
         }
-
-        void OnDisable()
-        {
-            ReleaseResources();
-        }
-
-        private void OnEnable()
-        {
-            prevCameraMatrix = Camera.main.cameraToWorldMatrix;
-            prevBounceCountOpaque = bounceCountOpaque;
-            prevBounceCountTransparent = bounceCountTransparent;
-
-        }
-
         
         IEnumerator Start()
         {
@@ -295,16 +277,18 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             }
             while (rayTracingAccelerationStructure == null)
                 yield return null;
-            int numSamples = 1000;
             Camera main = Camera.main;
-            for (int sample = 0; sample < numSamples; sample++)
+            for (uint sample = 0; sample < dataset.Samples; sample++)
             {
+                main.transform.position = (worldGenerator.random.NextFloat3() * 2 - 1) * worldGenerator.SpawnRadius.y + 
+                    worldGenerator.random.NextFloat(worldGenerator.SpawnSize.x, worldGenerator.SpawnSize.y);
+                main.transform.rotation = worldGenerator.random.NextQuaternionRotation();
                 int convergenceStep = 0;
 
                 rayTracingShader.SetShaderPass("PathTracing");
 
-                Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountOpaque"), (int)bounceCountOpaque);
-                Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountTransparent"), (int)bounceCountTransparent);
+                Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountOpaque"), (int)dataset.BounceCountOpaque);
+                Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountTransparent"), (int)dataset.BounceCountTransparent);
 
                 // Input
                 rayTracingShader.SetAccelerationStructure(Shader.PropertyToID("g_AccelStruct"), rayTracingAccelerationStructure);
@@ -324,6 +308,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Shape"), shapeRT);
 
                 rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
 
@@ -331,7 +316,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 convergenceStep++;
 
-                for (int i = 0; i < trainDataset.Convergence; i++)
+                for (int i = 0; i < dataset.Convergence; i++)
                 {
                     rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), convergedRT);
 
@@ -339,7 +324,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                     rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
                     convergenceStep++;
-                    yield return null;
+                    
+                    if (i%10 == 0)yield return null;
 
 
                     convergence.text = $"Convergence: {convergenceStep}";
@@ -374,18 +360,23 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                             Graphics.Blit(specularRT, main.targetTexture);
                             images.displayImage.texture = specularRT;
                             break;
+                        case ImageType.SHAPE:
+                            Graphics.Blit(shapeRT, main.targetTexture);
+                            images.displayImage.texture = shapeRT;
+                            break;
                     }
 
                     images.normalImage.texture = normalRT;
                     images.albedoImage.texture = albedoRT;
                     images.depthImage.texture = depthRT;
                     images.emissionImage.texture = emissionRT;
-                    images.materialImage.texture = specularRT;
+                    images.specularImage.texture = specularRT;
                     images.noisyImage.texture = noisyRadianceRT;
                     images.convergedImage.texture = convergedRT;
+                    images.shapeImage.texture = shapeRT;
                 }
                 // invoke dataset
-
+                dataset.AddData(ref noisyRadianceRT, ref normalRT, ref depthRT, ref albedoRT, ref shapeRT, ref emissionRT, ref specularRT, ref convergedRT);
             }
         }
 

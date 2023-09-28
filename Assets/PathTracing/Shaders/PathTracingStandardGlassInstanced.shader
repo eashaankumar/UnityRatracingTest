@@ -149,9 +149,10 @@ Shader "PathTracing/StandardGlassInstanced"
                 payload.bounceRayDirection      = bounceRayDir;
 
                 payload.meta.normal = worldNormal;
-                payload.meta.albedo = instanceData.albedo;
+                payload.meta.albedo = albedo;
                 payload.meta.emission = instanceData.emission;
                 payload.meta.specular = payload.k;
+                payload.meta.shape = float3(0, 1, 0);
             }
 
             ENDHLSL
