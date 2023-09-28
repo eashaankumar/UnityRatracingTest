@@ -81,7 +81,7 @@ public class WorldGenerator : MonoBehaviour
 
         public void Execute(int index)
         {
-            float3 pos = random.NextFloat3Direction() * random.NextFloat(spawnRadius.x, spawnRadius.y);
+            float3 pos = (random.NextFloat3() * 2 - 1) * spawnRadius.y;//(posNoise) * random.NextFloat(spawnRadius.x, spawnRadius.y);
             quaternion rot = random.NextQuaternionRotation();
             float size = random.NextFloat(spawnSize.x, spawnSize.y);
             Matrix4x4 trs = Matrix4x4.TRS(pos, rot, new float3(1, 1, 1) * size);
@@ -98,9 +98,9 @@ public class WorldGenerator : MonoBehaviour
                             albedo = RandColor(index),
                             specular = RandSpecular(),
                             emission = RandColor(index) * random.NextFloat(0f, 1f),
-                            smoothness = 0.5f,
-                            metallic = 0.2f,
-                            ior = 0.6f
+                            smoothness = random.NextFloat(0f, 1f),
+                            metallic = random.NextFloat(0f, 1f),
+                            ior = random.NextFloat(0f, 1f)
                         },
                         trs = trs
                     }
@@ -117,7 +117,7 @@ public class WorldGenerator : MonoBehaviour
                             emission = RandColor(index) * random.NextFloat(0f, 1.1f),
                             ior = random.NextFloat(1.0f, 2.8f),
                             roughness = random.NextFloat(0f, 0.5f),
-                            extinctionCoeff = 0,
+                            extinctionCoeff = random.NextFloat(0f, 10f),
                             flatShading = 0,
                         },
                         trs= trs

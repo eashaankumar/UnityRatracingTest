@@ -93,6 +93,8 @@ void MainRayGenShader()
         {
             TraceRay(g_AccelStruct, 0, 0xFF, 0, 1, missShaderIndex, ray, payload);
 
+            payload.albedo = clamp(payload.albedo, 0, 1);
+
             radiance += payload.emission * throughput;
 
             throughput *= payload.albedo / max(0.001, payload.k);

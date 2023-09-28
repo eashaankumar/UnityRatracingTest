@@ -7,6 +7,8 @@ using BarelyFunctional.Structs;
 using BarelyFunctional.Interfaces;
 using BarelyFunctional.VerletPhysics;
 using UnityEngine.UI;
+using TMPro;
+using System.Collections;
 
 // https://github.com/INedelcu/RayTracingMeshInstancingSimple
 namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
@@ -15,11 +17,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
     {
         [Header("Renderer Cache Generator")]
         [SerializeField]
-        BFVerletPhysicsMaster physicsMaster;
-        [SerializeField]
         WorldGenerator worldGenerator;
-        [SerializeField]
-        SimulationType simulationType;
 
         [SerializeField]
         Dataset trainDataset;
@@ -35,10 +33,14 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         RawImages images;
         [SerializeField]
         Canvas iamgesCanvas;
+        [SerializeField]
+        TMP_Text convergence;
 
         [System.Serializable]
         struct RawImages
         {
+            [SerializeField]
+            public RawImage displayImage;
             [SerializeField]
             public RawImage normalImage;
             [SerializeField]
@@ -61,12 +63,6 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL
         }
 
-        [System.Serializable]
-        public enum SimulationType
-        {
-            VERLET_PHYSICS, WORLD_GENERATOR
-        }
-
         [Header("Ray Tracing")]
         public RayTracingShader rayTracingShader = null;
 
@@ -82,12 +78,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         public Material material;
         public Material glassMaterial;
 
-        public Transform target;
-
         private uint cameraWidth = 0;
         private uint cameraHeight = 0;
-
-        private int convergenceStep = 0;
 
         private Matrix4x4 prevCameraMatrix;
         private uint prevBounceCountOpaque = 0;
@@ -100,6 +92,9 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
         ImageType imageType = ImageType.NOISY;
+
+        VoxelInstancedRenderer vRenderer;
+        GraphicsBuffer stadardMaterialdata = null, glassMaterialData = null;
 
         private void CreateRayTracingAccelerationStructure()
         {
@@ -220,6 +215,9 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         void OnDestroy()
         {
             ReleaseResources();
+            vRenderer.Dispose();
+            if (stadardMaterialdata != null) stadardMaterialdata.Release();
+            if (glassMaterialData != null) glassMaterialData.Release();
         }
 
         void OnDisable()
@@ -235,54 +233,16 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         }
 
-        private void Update()
+        
+        IEnumerator Start()
         {
-            if (Input.GetKeyDown(KeyCode.M))
-            {
-                iamgesCanvas.enabled = !iamgesCanvas.enabled;
-            }
-        }
+            yield return new WaitUntil(() => worldGenerator.IsReady);
+            vRenderer = worldGenerator.RendererCache;
 
-
-        [ImageEffectOpaque]
-        void OnRenderImage(RenderTexture src, RenderTexture dest)
-        {
-            if (!SystemInfo.supportsRayTracing || !rayTracingShader)
-            {
-                Debug.Log("The RayTracing API is not supported by this GPU or by the current graphics API.");
-                Graphics.Blit(src, dest);
-                return; 
-            }
-
-            // TODO: Handle convergence
-            
             CreateResources();
 
-            if (rayTracingAccelerationStructure == null)
-                return;
-
-            if (prevCameraMatrix != Camera.main.cameraToWorldMatrix)
-                convergenceStep = 0;
-
-            if (prevBounceCountOpaque != bounceCountOpaque)
-                convergenceStep = 0;
-
-            if (prevBounceCountTransparent != bounceCountTransparent)
-                convergenceStep = 0;
-
             rayTracingAccelerationStructure.ClearInstances();
-
-            #region Instancing
-            if (!worldGenerator.IsReady) return;
-            VoxelInstancedRenderer vRenderer;
-            if (simulationType == SimulationType.VERLET_PHYSICS)
-            {
-                convergenceStep = 0;
-                vRenderer = physicsMaster.Tick();
-            }
-            else if (simulationType == SimulationType.WORLD_GENERATOR) vRenderer = worldGenerator.RendererCache;
-            else throw new System.Exception($"Invalid Renderer Cache Provider {simulationType}");
-            GraphicsBuffer stadardMaterialdata = null, glassMaterialData = null;
+            
             if (vRenderer.standardMaterialData.Length > 0)
             {
                 stadardMaterialdata = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.standardMaterialData.Length, StandardMaterialData.Size);
@@ -309,93 +269,124 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 rayTracingAccelerationStructure.AddInstances(config, vRenderer.glassMatrices);
             }
-            if (simulationType == SimulationType.VERLET_PHYSICS) vRenderer.Dispose();
-            #endregion
 
             // Not really needed per frame if the scene is static.
             rayTracingAccelerationStructure.Build();
+            StartCoroutine(GenDataSet());
+        }
+        
 
-            rayTracingShader.SetShaderPass("PathTracing");
-
-            Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountOpaque"), (int)bounceCountOpaque);
-            Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountTransparent"), (int)bounceCountTransparent);
-
-            // Input
-            rayTracingShader.SetAccelerationStructure(Shader.PropertyToID("g_AccelStruct"), rayTracingAccelerationStructure);
-            rayTracingShader.SetFloat(Shader.PropertyToID("g_Zoom"), Mathf.Tan(Mathf.Deg2Rad * Camera.main.fieldOfView * 0.5f));
-            rayTracingShader.SetFloat(Shader.PropertyToID("g_AspectRatio"), cameraWidth / (float)cameraHeight);
-            rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
-            rayTracingShader.SetInt(Shader.PropertyToID("g_FrameIndex"), Time.frameCount);
-            rayTracingShader.SetVector(Shader.PropertyToID("g_SkyboxBottomColor"), new Vector3(bottomColor.r, bottomColor.g, bottomColor.b));
-            rayTracingShader.SetVector(Shader.PropertyToID("g_SkyboxTopColor"), new Vector3(topColor.r, topColor.g, topColor.b));
-
-            //rayTracingShader.SetTexture(Shader.PropertyToID("g_EnvTex"), envTexture);
-
-            // Output
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Normal"), normalRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
-
-            rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
-
-            rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
-
-            convergenceStep++;
-
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), convergedRT);
-
-
-            for(int i = 0; i < 10; i++)
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.M))
             {
+                iamgesCanvas.enabled = !iamgesCanvas.enabled;
+            }
+        }
+
+
+        IEnumerator GenDataSet()
+        {
+            if (!SystemInfo.supportsRayTracing || !rayTracingShader)
+            {
+                Debug.Log("The RayTracing API is not supported by this GPU or by the current graphics API.");
+                //Graphics.Blit(src, dest);
+                yield break;
+            }
+            while (rayTracingAccelerationStructure == null)
+                yield return null;
+            int numSamples = 1000;
+            Camera main = Camera.main;
+            for (int sample = 0; sample < numSamples; sample++)
+            {
+                int convergenceStep = 0;
+
+                rayTracingShader.SetShaderPass("PathTracing");
+
+                Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountOpaque"), (int)bounceCountOpaque);
+                Shader.SetGlobalInt(Shader.PropertyToID("g_BounceCountTransparent"), (int)bounceCountTransparent);
+
+                // Input
+                rayTracingShader.SetAccelerationStructure(Shader.PropertyToID("g_AccelStruct"), rayTracingAccelerationStructure);
+                rayTracingShader.SetFloat(Shader.PropertyToID("g_Zoom"), Mathf.Tan(Mathf.Deg2Rad * Camera.main.fieldOfView * 0.5f));
+                rayTracingShader.SetFloat(Shader.PropertyToID("g_AspectRatio"), cameraWidth / (float)cameraHeight);
+                rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
+                rayTracingShader.SetInt(Shader.PropertyToID("g_FrameIndex"), Time.frameCount);
+                rayTracingShader.SetVector(Shader.PropertyToID("g_SkyboxBottomColor"), new Vector3(bottomColor.r, bottomColor.g, bottomColor.b));
+                rayTracingShader.SetVector(Shader.PropertyToID("g_SkyboxTopColor"), new Vector3(topColor.r, topColor.g, topColor.b));
+
+                //rayTracingShader.SetTexture(Shader.PropertyToID("g_EnvTex"), envTexture);
+
+                // Output
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Normal"), normalRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
+
                 rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
 
                 rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
+
                 convergenceStep++;
+
+                for (int i = 0; i < trainDataset.Convergence; i++)
+                {
+                    rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), convergedRT);
+
+                    rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
+
+                    rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
+                    convergenceStep++;
+                    yield return null;
+
+
+                    convergence.text = $"Convergence: {convergenceStep}";
+
+                    switch (imageType)
+                    {
+                        case ImageType.NOISY:
+                            Graphics.Blit(noisyRadianceRT, main.targetTexture);
+                            images.displayImage.texture = noisyRadianceRT;
+                            break;
+                        case ImageType.CONVERGED:
+                            Graphics.Blit(convergedRT, main.targetTexture);
+                            images.displayImage.texture = convergedRT;
+                            break;
+                        case ImageType.NORMAL:
+                            Graphics.Blit(normalRT, main.targetTexture);
+                            images.displayImage.texture = normalRT;
+                            break;
+                        case ImageType.ALBEDO:
+                            Graphics.Blit(albedoRT, main.targetTexture);
+                            images.displayImage.texture = albedoRT;
+                            break;
+                        case ImageType.DEPTH:
+                            Graphics.Blit(depthRT, main.targetTexture);
+                            images.displayImage.texture = depthRT;
+                            break;
+                        case ImageType.EMISSION:
+                            Graphics.Blit(emissionRT, main.targetTexture);
+                            images.displayImage.texture = emissionRT;
+                            break;
+                        case ImageType.MATERIAL:
+                            Graphics.Blit(specularRT, main.targetTexture);
+                            images.displayImage.texture = specularRT;
+                            break;
+                    }
+
+                    images.normalImage.texture = normalRT;
+                    images.albedoImage.texture = albedoRT;
+                    images.depthImage.texture = depthRT;
+                    images.emissionImage.texture = emissionRT;
+                    images.materialImage.texture = specularRT;
+                    images.noisyImage.texture = noisyRadianceRT;
+                    images.convergedImage.texture = convergedRT;
+                }
+                // invoke dataset
+
             }
-
-            print(imageType);
-
-            switch (imageType)
-            {
-                case ImageType.NOISY:
-                    Graphics.Blit(noisyRadianceRT, dest);
-                    break;
-                case ImageType.CONVERGED:
-                    Graphics.Blit(convergedRT, dest);
-                    break;
-                case ImageType.NORMAL:
-                    Graphics.Blit(normalRT, dest);
-                    break;
-                case ImageType.ALBEDO:
-                    Graphics.Blit(albedoRT, dest);
-                    break;
-                case ImageType.DEPTH:
-                    Graphics.Blit(depthRT, dest);
-                    break;
-                case ImageType.EMISSION:
-                    Graphics.Blit(emissionRT, dest);
-                    break;
-                case ImageType.MATERIAL:
-                    Graphics.Blit(specularRT, dest);
-                    break;
-            }
-
-            images.normalImage.texture = normalRT;
-            images.albedoImage.texture = albedoRT;
-            images.depthImage.texture = depthRT;
-            images.emissionImage.texture = emissionRT;
-            images.materialImage.texture = specularRT;
-            images.noisyImage.texture = noisyRadianceRT;
-            images.convergedImage.texture = convergedRT;
-
-            prevCameraMatrix = Camera.main.cameraToWorldMatrix;
-            prevBounceCountOpaque = bounceCountOpaque;
-            prevBounceCountTransparent = bounceCountTransparent;
-            if (stadardMaterialdata != null) stadardMaterialdata.Release();
-            if (glassMaterialData != null) glassMaterialData.Release();
         }
 
 

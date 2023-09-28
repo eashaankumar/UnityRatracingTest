@@ -14,6 +14,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             public int width;
             public int height;
             public string datasetName; // DenoisingDataset
+            public int convergence;
 
             public string BaseFilePathSep
             {
@@ -26,6 +27,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         }
         [SerializeField]
         DatasetInfo info;
+        
 
         int id;
         static readonly char SEP = '-';
@@ -41,6 +43,11 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         public int PixelHeight
         {
             get { return info.height; }
+        }
+
+        public int Convergence
+        {
+            get { return info.convergence; }
         }
 
         private void Awake()
