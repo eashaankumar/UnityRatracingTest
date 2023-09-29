@@ -20,9 +20,9 @@ class CNN_SD_Denoiser(torch.nn.Module):
             'normals': 3,
             'depth': 1,
             'albedo': 3,
-            'shape': 1,
-            'emission': 1,
-            'material': 1
+            'shape': 3,
+            'emission': 3,
+            'specular': 1
         }
         self.output_channels = {
             'denoised': 3
@@ -33,14 +33,22 @@ class CNN_SD_Denoiser(torch.nn.Module):
                        first_layer * 2,
                        self.num_out_channels()
                        ]
-        self.kernels = [7, 5, 3]
         def CNN():
             N = []
-            c = self.num_input_channels() # start channels
-            for i,l in enumerate(self.layers):
-                N.append(torch.nn.Conv2d(c, l, kernel_size=self.kernels[i]))
-                N.append(torch.nn.ReLU())
-                c = l
+            N.append(torch.nn.Conv2d(self.num_input_channels(), 32, kernel_size=5))
+            N.append(torch.nn.ReLU())
+            N.append(torch.nn.Conv2d(32, 64, kernel_size=5))
+            N.append(torch.nn.ReLU())
+            N.append(torch.nn.MaxPool2d(kernel_size=3))
+            N.append(torch.nn.Conv2d(64, 128, kernel_size=1))
+            N.append(torch.nn.ReLU())
+            N.append(torch.nn.Dropout(p=0.2))
+            N.append(torch.nn.ConvTranspose2d(128, 64, kernel_size=5, output_padding=1, stride=3))
+            N.append(torch.nn.ReLU())
+            N.append(torch.nn.ConvTranspose2d(64, 8, kernel_size=5))
+            N.append(torch.nn.ReLU())
+            N.append(torch.nn.ConvTranspose2d(8, 3, kernel_size=3))
+            N.append(torch.nn.ReLU())
             return torch.nn.Sequential(*N)
         self.model = CNN()
 

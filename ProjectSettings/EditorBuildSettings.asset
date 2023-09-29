@@ -4,5 +4,9 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/BFVerletPhysicsDenoising/Scenes/TrainingPathTracer.unity
+    guid: 111541351d0ce6e4abe9f18a1951f9d5
   m_configObjects: {}
+  m_UseUCBPForAssetBundles: 0

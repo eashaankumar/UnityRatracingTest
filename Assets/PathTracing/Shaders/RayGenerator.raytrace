@@ -39,10 +39,6 @@ void MainRayGenShader()
     int convergenceStep = g_ConvergenceStep;
     uint rngState = uint(uint(launchIndex.x) * uint(1973) + uint(launchIndex.y) * uint(9277) + uint(convergenceStep + g_FrameIndex) * uint(26699)) | uint(1);
 
-    int rays = 10;
-    for(int i = 0; i < rays; i++)
-    {
-       
 
         float2 jitter = float2(RandomFloat01(rngState), RandomFloat01(rngState)) - float2(0.5, 0.5);
 
@@ -122,32 +118,30 @@ void MainRayGenShader()
 
         g_Radiance[launchIndex] = float4(lerp(g_Radiance[launchIndex].xyz, radiance, 1 / float(convergenceStep + 1)), 1);
 
-        convergenceStep++;
-    }
+        //convergenceStep++;
+    
 
     //g_Albedo[launchIndex] = g_Albedo[launchIndex] / rays;
     //g_Normal[launchIndex] = g_Normal[launchIndex] / rays;
 
     // meta info
 
-    float2 ndcCoords = (frameCoord) / float2(launchDim.x - 1, launchDim.y - 1);
+    ndcCoords = (frameCoord) / float2(launchDim.x - 1, launchDim.y - 1);
         
     ndcCoords = ndcCoords * 2 - float2(1, 1);
     ndcCoords = ndcCoords * g_Zoom;
 
     // Get a ray in view space.
-    float3 viewDirection = normalize(float3(ndcCoords.x * g_AspectRatio, ndcCoords.y, 1));
+    viewDirection = normalize(float3(ndcCoords.x * g_AspectRatio, ndcCoords.y, 1));
 
     // Rotate the ray from view space to world space.
-    float3 rayDirection = mul((float3x3)unity_CameraToWorld, viewDirection);
+    rayDirection = mul((float3x3)unity_CameraToWorld, viewDirection);
 
-    RayDesc ray;
     ray.Origin      = _WorldSpaceCameraPos;
     ray.Direction   = rayDirection;
     ray.TMin        = 0;
     ray.TMax        = K_T_MAX;
               
-    RayPayload payload;
     payload.albedo                  = float3(1, 1, 1);
     payload.emission                = float3(0, 0, 0);
     payload.rngState                = rngState;
@@ -157,7 +151,6 @@ void MainRayGenShader()
     payload.bounceRayDirection      = float3(0, 0, 0);
     payload.k                       = 1;
         
-    MetaPayload meta;
     meta.normal                     = float3(0,0,0);
     meta.albedo                     = float3(-1,-1,-1);
     meta.emission                   = float3(0, 0, 0);
@@ -165,7 +158,7 @@ void MainRayGenShader()
     meta.shape                      = float3(-1, -1, -1);
     payload.meta                    = meta;
 
-    uint missShaderIndex = 0;
+    missShaderIndex = 0;
 
     TraceRay(g_AccelStruct, 0, 0xFF, 0, 1, missShaderIndex, ray, payload);
 

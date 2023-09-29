@@ -28,7 +28,6 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         DatasetInfo info;
         
 
-        int id;
         static readonly char SEP = '-';
 
         public int PixelWidth
@@ -69,27 +68,25 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         private void Awake()
         {
-            id = 0;
             info.datasetName = info.datasetName.Replace(SEP + "", "");
         }
 
-        public void AddData(ref RenderTexture noisy, ref RenderTexture normals, ref RenderTexture depth,
+        public void AddData(int id, ref RenderTexture noisy, ref RenderTexture normals, ref RenderTexture depth,
                             ref RenderTexture albedo, ref RenderTexture shape, ref RenderTexture emission,
                             ref RenderTexture specular, ref RenderTexture converged)
         {
             string baseFilePath = info.targetFolder + "\\" + id + "\\";
-            SaveTexture(ref noisy, baseFilePath, "noisy");
-            SaveTexture(ref normals, baseFilePath, "normals");
-            SaveTexture(ref depth, baseFilePath, "depth");
-            SaveTexture(ref albedo, baseFilePath, "albedo");
-            SaveTexture(ref shape, baseFilePath, "shape");
-            SaveTexture(ref emission, baseFilePath, "emission");
-            SaveTexture(ref specular, baseFilePath, "specular");
-            SaveTexture(ref converged, baseFilePath, "converged");
-            id++;
+            SaveTexture(ref noisy, baseFilePath, "noisy", id);
+            SaveTexture(ref normals, baseFilePath, "normals", id);
+            SaveTexture(ref depth, baseFilePath, "depth", id);
+            SaveTexture(ref albedo, baseFilePath, "albedo", id);
+            SaveTexture(ref shape, baseFilePath, "shape", id);
+            SaveTexture(ref emission, baseFilePath, "emission", id);
+            SaveTexture(ref specular, baseFilePath, "specular", id);
+            SaveTexture(ref converged, baseFilePath, "converged", id);
         }
 
-        void SaveTexture(ref RenderTexture rt, string baseFilePathSep, string name)
+        void SaveTexture(ref RenderTexture rt, string baseFilePathSep, string name, int id)
         {
             byte[] bytes = toTexture2D(ref rt).EncodeToJPG();
             bool exists = System.IO.Directory.Exists(baseFilePathSep);

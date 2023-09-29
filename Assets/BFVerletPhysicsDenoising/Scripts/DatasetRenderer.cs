@@ -15,6 +15,9 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 {
     public class DatasetRenderer : MonoBehaviour
     {
+        [SerializeField]
+        public uint startSample;
+
         [Header("Renderer Cache Generator")]
         [SerializeField]
         WorldGenerator worldGenerator;
@@ -35,6 +38,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
         Canvas iamgesCanvas;
         [SerializeField]
         TMP_Text convergence;
+        [SerializeField]
+        TMP_Text sample;
 
         [System.Serializable]
         struct RawImages
@@ -278,8 +283,16 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             while (rayTracingAccelerationStructure == null)
                 yield return null;
             Camera main = Camera.main;
-            for (uint sample = 0; sample < dataset.Samples; sample++)
+            // consume randoms
+            for(int i = 0; i < startSample; i++)
             {
+                main.transform.position = (worldGenerator.random.NextFloat3() * 2 - 1) * worldGenerator.SpawnRadius.y +
+                    worldGenerator.random.NextFloat(worldGenerator.SpawnSize.x, worldGenerator.SpawnSize.y);
+                main.transform.rotation = worldGenerator.random.NextQuaternionRotation();
+            }
+            for (uint sample = startSample; sample < dataset.Samples; sample++)
+            {
+                this.sample.text = "Sample: " + sample;
                 main.transform.position = (worldGenerator.random.NextFloat3() * 2 - 1) * worldGenerator.SpawnRadius.y + 
                     worldGenerator.random.NextFloat(worldGenerator.SpawnSize.x, worldGenerator.SpawnSize.y);
                 main.transform.rotation = worldGenerator.random.NextQuaternionRotation();
@@ -316,6 +329,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 convergenceStep++;
 
+                yield return null;
+
                 for (int i = 0; i < dataset.Convergence; i++)
                 {
                     rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), convergedRT);
@@ -324,9 +339,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                     rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
                     convergenceStep++;
-                    
-                    if (i%10 == 0)yield return null;
 
+                    if (i%500 == 0)yield return null;
 
                     convergence.text = $"Convergence: {convergenceStep}";
 
@@ -376,7 +390,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     images.shapeImage.texture = shapeRT;
                 }
                 // invoke dataset
-                dataset.AddData(ref noisyRadianceRT, ref normalRT, ref depthRT, ref albedoRT, ref shapeRT, ref emissionRT, ref specularRT, ref convergedRT);
+                dataset.AddData((int)sample, ref noisyRadianceRT, ref normalRT, ref depthRT, ref albedoRT, ref shapeRT, ref emissionRT, ref specularRT, ref convergedRT);
             }
         }
 
