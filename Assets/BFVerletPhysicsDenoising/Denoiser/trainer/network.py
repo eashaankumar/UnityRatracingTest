@@ -55,11 +55,8 @@ class CNN_SD_Denoiser(torch.nn.Module):
     def forward(self, x):
         return self.model(x)
         
-    def make_input_tensor(self, noisy, normals, depth, albdeo, shape, emission, material):
-        assert((noisy.shape[-1] + normals.shape[-1] + depth.shape[-1] + albdeo.shape[-1] + \
-               shape.shape[-1] + emission.shape[-1] + material.shape[-1]) == self.num_input_channels())
-        tensor = torch.cat([noisy, normals, depth, albdeo, shape, emission, material], dim=2)
-        assert (tensor.shape[2] == self.num_input_channels())
+    def make_input_tensor(self, noisy, normals, depth, albedo, shape, emission, specular, channelIndex):
+        tensor = torch.cat([noisy, normals, depth, albedo, shape, emission, specular], dim=channelIndex)
         return tensor
 
     def num_input_channels(self) -> int:
