@@ -8,7 +8,9 @@ from tqdm import tqdm
 import threading
 
 def load_thread(iter, data, desiredKeys, file_type, trans, dataset_path, data_range):
-    with tqdm(iter[0], iter[1]) as tepoch:
+    data.extend([0] * (len(iter[0])))
+    assert (len(data) == len(iter[0]))
+    with tqdm(iter[0], f"{iter[1]} {len(data)}") as tepoch:
         name = dataset_path.split("\\")[-2:]
         tepoch.set_description(f"{name[0]}-{name[1]}-{data_range}")
         for i, subdir in enumerate(tepoch):
@@ -42,14 +44,16 @@ def load_thread(iter, data, desiredKeys, file_type, trans, dataset_path, data_ra
             assert len(keys) == 8
             for key in keys:
                 assert key in desiredKeys
-            data.append(buffers)
+
+            data[i] = buffers
+            # data.append(buffers)
             pass
 
 
 class CNN_SD_Denoiser_Dataset(Dataset):
 
    
-    def __init__(self, dataset_path: str, file_type, num_dataset_threads=3):
+    def __init__(self, dataset_path: str, file_type, num_dataset_threads=3, data_count=-1):
         # import the modules
         import os
         from os import listdir
@@ -65,6 +69,8 @@ class CNN_SD_Denoiser_Dataset(Dataset):
         print(f"Loading {dataset_path} on {num_dataset_threads} threads")
 
         total_data = os.listdir(dataset_path)
+        if (data_count > 0 and data_count < len(total_data)):
+            total_data = total_data[:data_count]
         partition_size = int(len(total_data) / num_dataset_threads)
         start = 0
         for i in range(num_dataset_threads):
@@ -83,6 +89,8 @@ class CNN_SD_Denoiser_Dataset(Dataset):
         
         for i in range(num_dataset_threads):
             self.threads[i].join()
+
+        for i in range(num_dataset_threads):
             self.data.extend(self.threadsData[i])
         
         assert (len(self.data) == len(total_data))
@@ -93,8 +101,8 @@ class CNN_SD_Denoiser_Dataset(Dataset):
     def __getitem__(self, index):
         return self.data[index]
 
-def load_data(dataset_path, num_workers=0, batch_size=128, num_dataset_threads=3):
-    dataset = CNN_SD_Denoiser_Dataset(dataset_path, file_type='jpg', num_dataset_threads=num_dataset_threads)
+def load_data(dataset_path, num_workers=0, batch_size=128, num_dataset_threads=3, data_count=-1):
+    dataset = CNN_SD_Denoiser_Dataset(dataset_path, file_type='jpg', num_dataset_threads=num_dataset_threads, data_count=data_count)
     return DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, shuffle=True, drop_last=True)
     
 if __name__ == '__main__':
