@@ -1,6 +1,7 @@
 from .network import CNN_240p_Denoiser, load_model, save_model
 from .data import load_data
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import argparse
 import os
 from tqdm import tqdm
@@ -12,23 +13,28 @@ from .utils import *
 class DebugImagePlotter:
     def __init__(self, name, num_images, sd_size):
         
-        self.num_images = num_images
-        self.num_cols = 3 + 3
+        self.num_images = 1
+        self.num_cols = 2 + 2
         plt.ion()
-        self.f, self.axarr = plt.subplots(self.num_images, self.num_cols)
-        self.ims = [[None] * self.num_cols] * self.num_images
+        self.f, self.axarr = plt.subplots(self.num_images, self.num_cols, figsize=(10*1.775, 10))
+        self.ims = [[None] * self.num_cols]
         assert len(self.ims) == self.num_images
         assert len(self.ims[0]) == self.num_cols
         for x in range(self.num_images):
             for y in range(self.num_cols):
-                self.ims[x][y] = self.axarr[x,y].imshow(X=np.random.random((sd_size[0],sd_size[1], 3)))
+                self.ims[x][y] = self.axarr[y].imshow(aspect='auto',X=np.random.random((sd_size[0],sd_size[1], 3)))
 
-        plt.title(name, fontsize=20)
+        # plt.title(name, fontsize=20)
         pass
 
     def add(self, train_images_noisy, train_images_true, train_images_predict,
             val_images_noisy, val_images_true, val_images_predict):
-        self.ims[0][0].set_data(train_images_noisy[0].permute(1,2,0))
+        for i in range(self.num_images):
+            self.ims[i][0].set_data(train_images_true[i])
+            self.ims[i][1].set_data(train_images_predict[i])
+            self.ims[i][2].set_data(val_images_true[i])
+            self.ims[i][3].set_data(val_images_predict[i])
+
         # drawing updated values
         self.f.canvas.draw()
     
@@ -49,7 +55,6 @@ class LossPlotter:
         self.max_points = max_points
         
         plt.ion()
-        
         # here we are creating sub plots
         self.figure, self.ax = plt.subplots(figsize=(10, 8))
         self.line1, = self.ax.plot(self.x, self.y1, label=line1)
@@ -111,8 +116,8 @@ class DenoisingAutoencoderTrainer:
         self.sd_size = (240,426)
         self.optim = None
         self.loss = None
-        self.loss_plotter = LossPlotter("CNN 240p Denoiser", "epochs", "loss", max_points=1000, line1="Train", line2="Val")
-        self.image_debugger = DebugImagePlotter("CNN 240p Denoiser", 5, sd_size=self.sd_size)
+        self.writer = None
+        self.tensorboard_name = None
         pass
 
     def load_model_from_path(self, path):
@@ -134,9 +139,36 @@ class DenoisingAutoencoderTrainer:
         self.network = None
 
     def __init_params(self):
-        self.optim = torch.optim.Adam(self.network.parameters(), 0.0001)
+        self.optim = torch.optim.Adam(self.network.parameters(), 0.001)
         self.loss = torch.nn.MSELoss()
 
+    def load_writer(self, experiment_dir, tensorboard_name):
+        self.writer = SummaryWriter(os.path.join(experiment_dir, 'tf_logs', tensorboard_name))
+        self.tensorboard_name = tensorboard_name
+        pass
+
+    def __get_lr(self):
+        for g in self.optim.param_groups:
+            olr = g['lr']
+        return olr
+
+    def record_loss(self, train_loss, val_loss, step):
+        if self.writer:
+            
+            self.writer.add_scalars(f'{self.tensorboard_name}/Loss/lr={self.__get_lr()}/b={self.train_data.batch_size}/length={len(self.train_data.dataset)}', {
+                'Training Loss': train_loss,
+                'Validation Loss': val_loss,
+            }, step)
+            #TODO: Add more measurements
+            pass
+        pass
+
+    def record_imgs(self, tru, pred, step):
+        if self.writer:
+            assert len(tru.shape) == 4
+            self.writer.add_images(f'{self.tensorboard_name}/Images/lr={self.__get_lr()}/b={self.train_data.batch_size}/length={len(self.train_data.dataset)}', torch.cat((tru, pred), dim=0), step)
+        pass
+    
     def load_data(self, rootpath):
         self.train_data = load_data(os.path.join(rootpath, 'train'), batch_size=8, 
                            num_dataset_threads=10, data_count=100)
@@ -159,19 +191,21 @@ class DenoisingAutoencoderTrainer:
         train_images_inputs = []
         train_images_true = []
         train_images_predict = []
+        noisy_batch = noisy_batch.cpu().detach().numpy()
+        ground_truth_batch = ground_truth_batch.cpu().detach().numpy()
+        pred_batch = pred_batch.cpu().detach().numpy()
         for imageI in range(count):
-            train_images_inputs.append(noisy_batch[imageI])  
-            train_images_true.append(ground_truth_batch[imageI])  
-            train_images_predict.append(pred_batch[imageI]) 
+            train_images_inputs.append(np.transpose(noisy_batch[imageI],(1,2,0)))  
+            train_images_true.append(np.transpose(ground_truth_batch[imageI],(1,2,0)))  
+            train_images_predict.append(np.transpose(pred_batch[imageI],(1,2,0))) 
         return (train_images_inputs, train_images_true, train_images_predict)
 
     def train(self) -> float:
         total_train_loss = 0
         self.network.train()
-        debug_images = None
         with tqdm(iter(self.train_data), unit="batches") as trainloop:
             for i, buffers in enumerate(trainloop):
-                self.loss_plotter.update_display()
+                # self.loss_plotter.update_display()
                 trainloop.set_description(f"Train Batch {i}")
                 input_tensor = self.network.make_input_tensor(
                                 noisy=buffers['noisy'],
@@ -185,12 +219,6 @@ class DenoisingAutoencoderTrainer:
                             ).to(self.device)
                 ground_truth = buffers['converged'].to(self.device)
                 res = self.network(input_tensor)
-                if (i == 0):
-                    debug_images = self.__get_images(  noisy_batch=buffers['noisy'], \
-                                        ground_truth_batch=ground_truth, \
-                                        pred_batch=res, \
-                                        count=min(5, input_tensor.shape[0]))
-                    pass
                 del input_tensor
                 l = self.loss(res, ground_truth)
                 del ground_truth
@@ -200,7 +228,7 @@ class DenoisingAutoencoderTrainer:
                 curr_loss = l.cpu().data
                 total_train_loss += curr_loss
                 trainloop.set_postfix(loss=f"{curr_loss}")
-        return total_train_loss / len(self.train_data), debug_images
+        return total_train_loss / len(self.train_data.dataset)
 
     def validate(self):
         total_val_loss = 0
@@ -208,7 +236,7 @@ class DenoisingAutoencoderTrainer:
         debug_images = None
         with tqdm(iter(self.val_data), unit="batches") as valloop:
             for i, buffers in enumerate(valloop):
-                self.loss_plotter.update_display()
+                # self.loss_plotter.update_display()
                 valloop.set_description(f"Val Batch {i}")
                 input_tensor = self.network.make_input_tensor(
                                 noisy=buffers['noisy'],
@@ -223,10 +251,7 @@ class DenoisingAutoencoderTrainer:
                 ground_truth = buffers['converged'].to(self.device)
                 res = self.network(input_tensor)
                 if (i == 0):
-                    debug_images = self.__get_images(  noisy_batch=buffers['noisy'], \
-                                        ground_truth_batch=ground_truth, \
-                                        pred_batch=res, \
-                                        count=min(5, input_tensor.shape[0]))
+                    debug_images = ground_truth[:5], res[:5]
                     pass
                 del input_tensor
                 l = self.loss(res, ground_truth)
@@ -234,7 +259,7 @@ class DenoisingAutoencoderTrainer:
                 curr_loss = l.cpu().data
                 total_val_loss += curr_loss
                 valloop.set_postfix(loss=f"{curr_loss}")
-        return total_val_loss / len(self.val_data), debug_images
+        return total_val_loss / len(self.val_data.dataset), debug_images
 
 class TrainingMenu:
     def __init__(self) -> None:
@@ -289,6 +314,7 @@ if __name__ == '__main__':
     parser.add_argument("--experiment", help="path to experiment root directory", type=str, required=True)
     parser.add_argument("--modelversion", help="version number to save model as", type=str, required=True)
     parser.add_argument("--load_model", help="is this model saved and to be loaded from?", type=str, required=True, default='False')
+    parser.add_argument("--tensorboard", help="name of tensorboard for this run", type=str, required=True, default='tensorboard')
     args = parser.parse_args()
 
     trainer = DenoisingAutoencoderTrainer()
@@ -313,6 +339,7 @@ if __name__ == '__main__':
 
 
     trainer.load_data(args.rootpath)
+    trainer.load_writer(args.experiment, args.tensorboard)
 
     inputManager = TrainingMenu()
 
@@ -333,14 +360,16 @@ if __name__ == '__main__':
                 inputManager.menu(optim=trainer.optim, timeout=10)
                 print("Continuing...")
                 
-            train_loss, train_images = trainer.train()
+            train_loss = trainer.train()
 
             val_loss, valid_images = trainer.validate()
 
-            trainer.loss_plotter.add(epoch, train_loss, val_loss)
-            trainer.image_debugger.add(train_images_noisy=train_images[0],
-                                       train_images_true=train_images[1],
-                                       train_images_predict=train_images[2],
-                                       val_images_noisy=valid_images[0],
-                                       val_images_true=valid_images[1],
-                                       val_images_predict=valid_images[2])
+            trainer.record_loss(train_loss, val_loss, epoch)
+            trainer.record_imgs(tru=valid_images[0], pred=valid_images[1], step=epoch)
+            # trainer.loss_plotter.add(epoch, train_loss, val_loss)
+            # trainer.image_debugger.add(train_images_noisy=train_images[0],
+            #                            train_images_true=train_images[1],
+            #                            train_images_predict=train_images[2],
+            #                            val_images_noisy=valid_images[0],
+            #                            val_images_true=valid_images[1],
+            #                            val_images_predict=valid_images[2])
