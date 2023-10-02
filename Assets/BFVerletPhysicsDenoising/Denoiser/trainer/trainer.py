@@ -9,6 +9,35 @@ import numpy as np
 from inputimeout import inputimeout, TimeoutOccurred
 from .utils import *
 
+class DebugImagePlotter:
+    def __init__(self, name, num_images, sd_size):
+        
+        self.num_images = num_images
+        self.num_cols = 3 + 3
+        plt.ion()
+        self.f, self.axarr = plt.subplots(self.num_images, self.num_cols)
+        self.ims = [[None] * self.num_cols] * self.num_images
+        assert len(self.ims) == self.num_images
+        assert len(self.ims[0]) == self.num_cols
+        for x in range(self.num_images):
+            for y in range(self.num_cols):
+                self.ims[x][y] = self.axarr[x,y].imshow(X=np.random.random((sd_size[0],sd_size[1], 3)))
+
+        plt.title(name, fontsize=20)
+        pass
+
+    def add(self, train_images_noisy, train_images_true, train_images_predict,
+            val_images_noisy, val_images_true, val_images_predict):
+        self.ims[0][0].set_data(train_images_noisy[0].permute(1,2,0))
+        # drawing updated values
+        self.f.canvas.draw()
+    
+        # This will run the GUI event
+        # loop until all UI events
+        # currently waiting have been processed
+        self.f.canvas.flush_events()
+        pass
+
 class LossPlotter:
     def __init__(self, name, xlabel, ylabel, max_points, line1, line2) -> None:
         # creating initial data values
@@ -26,7 +55,12 @@ class LossPlotter:
         self.line1, = self.ax.plot(self.x, self.y1, label=line1)
         self.line2, = self.ax.plot(self.x, self.y2, label=line2)
         self.ax.legend()
+
+        # self.subfigs = self.figure.subfigures(1, 1, wspace=0.07, width_ratios=[1.5, 1.])
         
+        # self.img_ax1 = self.subfigs.add_subplot(1, 1, 7)
+        
+
         # setting title
         plt.title(name, fontsize=20)
         
@@ -67,7 +101,7 @@ class LossPlotter:
 
         plt.show()
 
-class Trainer:
+class DenoisingAutoencoderTrainer:
     def __init__(self) -> None:
         self.network = None
         self.train_data = None
@@ -77,7 +111,8 @@ class Trainer:
         self.sd_size = (240,426)
         self.optim = None
         self.loss = None
-        self.loss_plotter = LossPlotter("CNN 240p Denoiser Dataset", "epochs", "loss", max_points=1000, line1="Train", line2="Val")
+        self.loss_plotter = LossPlotter("CNN 240p Denoiser", "epochs", "loss", max_points=1000, line1="Train", line2="Val")
+        self.image_debugger = DebugImagePlotter("CNN 240p Denoiser", 5, sd_size=self.sd_size)
         pass
 
     def load_model_from_path(self, path):
@@ -99,21 +134,41 @@ class Trainer:
         self.network = None
 
     def __init_params(self):
-        self.optim = torch.optim.Adam(self.network.parameters(), 0.001)
+        self.optim = torch.optim.Adam(self.network.parameters(), 0.0001)
         self.loss = torch.nn.MSELoss()
 
     def load_data(self, rootpath):
         self.train_data = load_data(os.path.join(rootpath, 'train'), batch_size=8, 
-                           num_dataset_threads=7, data_count=8000)
+                           num_dataset_threads=10, data_count=100)
         os.system('CLS')
         self.val_data = load_data(os.path.join(rootpath, 'val'), batch_size=8, 
-                            num_dataset_threads=7, data_count=800)
+                            num_dataset_threads=10, data_count=10)
         os.system('CLS')
         pass
+
+    def __assert_tensors(self, input_tensor, out_tensor):
+        assert input_tensor.shape[0] == out_tensor.shape[0]
+        assert input_tensor.shape[1] == self.network.num_input_channels()
+        assert out_tensor.shape[1] == self.network.num_out_channels()
+        assert input_tensor.shape[2] == self.sd_size[0]
+        assert input_tensor.shape[3] == self.sd_size[1]
+        assert input_tensor.shape[2] == out_tensor.shape[2]
+        assert input_tensor.shape[3] == out_tensor.shape[3]
+
+    def __get_images(self, noisy_batch, ground_truth_batch, pred_batch, count:int):
+        train_images_inputs = []
+        train_images_true = []
+        train_images_predict = []
+        for imageI in range(count):
+            train_images_inputs.append(noisy_batch[imageI])  
+            train_images_true.append(ground_truth_batch[imageI])  
+            train_images_predict.append(pred_batch[imageI]) 
+        return (train_images_inputs, train_images_true, train_images_predict)
 
     def train(self) -> float:
         total_train_loss = 0
         self.network.train()
+        debug_images = None
         with tqdm(iter(self.train_data), unit="batches") as trainloop:
             for i, buffers in enumerate(trainloop):
                 self.loss_plotter.update_display()
@@ -129,15 +184,13 @@ class Trainer:
                                 channelIndex=1
                             ).to(self.device)
                 ground_truth = buffers['converged'].to(self.device)
-                def assert_tensors(input_tensor, out_tensor):
-                    assert input_tensor.shape[0] == out_tensor.shape[0]
-                    assert input_tensor.shape[1] == self.network.num_input_channels()
-                    assert out_tensor.shape[1] == self.network.num_out_channels()
-                    assert input_tensor.shape[2] == self.sd_size[0]
-                    assert input_tensor.shape[3] == self.sd_size[1]
-                    assert input_tensor.shape[2] == out_tensor.shape[2]
-                    assert input_tensor.shape[3] == out_tensor.shape[3]
                 res = self.network(input_tensor)
+                if (i == 0):
+                    debug_images = self.__get_images(  noisy_batch=buffers['noisy'], \
+                                        ground_truth_batch=ground_truth, \
+                                        pred_batch=res, \
+                                        count=min(5, input_tensor.shape[0]))
+                    pass
                 del input_tensor
                 l = self.loss(res, ground_truth)
                 del ground_truth
@@ -147,11 +200,12 @@ class Trainer:
                 curr_loss = l.cpu().data
                 total_train_loss += curr_loss
                 trainloop.set_postfix(loss=f"{curr_loss}")
-        return total_train_loss / len(self.train_data)
+        return total_train_loss / len(self.train_data), debug_images
 
     def validate(self):
         total_val_loss = 0
         self.network.eval()
+        debug_images = None
         with tqdm(iter(self.val_data), unit="batches") as valloop:
             for i, buffers in enumerate(valloop):
                 self.loss_plotter.update_display()
@@ -167,20 +221,20 @@ class Trainer:
                                 channelIndex=1
                             ).to(self.device)
                 ground_truth = buffers['converged'].to(self.device)
-                def assert_tensors(input_tensor, out_tensor):
-                    assert input_tensor.shape[0] == out_tensor.shape[0]
-                    assert input_tensor.shape[1] == self.network.num_input_channels()
-                    assert out_tensor.shape[1] == self.network.num_out_channels()
-                    assert input_tensor.shape[2] == self.sd_size[0]
-                    assert input_tensor.shape[3] == self.sd_size[1]
-                    assert input_tensor.shape[2] == out_tensor.shape[2]
-                    assert input_tensor.shape[3] == out_tensor.shape[3]
                 res = self.network(input_tensor)
+                if (i == 0):
+                    debug_images = self.__get_images(  noisy_batch=buffers['noisy'], \
+                                        ground_truth_batch=ground_truth, \
+                                        pred_batch=res, \
+                                        count=min(5, input_tensor.shape[0]))
+                    pass
+                del input_tensor
                 l = self.loss(res, ground_truth)
+                del ground_truth
                 curr_loss = l.cpu().data
                 total_val_loss += curr_loss
                 valloop.set_postfix(loss=f"{curr_loss}")
-        return total_val_loss / len(self.val_data)
+        return total_val_loss / len(self.val_data), debug_images
 
 class TrainingMenu:
     def __init__(self) -> None:
@@ -219,7 +273,7 @@ class TrainingMenu:
                 return
             else:
                 print(f'{bcolors.FAIL}invalid choice{bcolors.ENDC}')
-                self.menu(timeout=timeout)
+                self.menu(timeout=timeout, optim=optim)
                 return
         except TimeoutOccurred:
             return
@@ -237,7 +291,7 @@ if __name__ == '__main__':
     parser.add_argument("--load_model", help="is this model saved and to be loaded from?", type=str, required=True, default='False')
     args = parser.parse_args()
 
-    trainer = Trainer()
+    trainer = DenoisingAutoencoderTrainer()
     if (args.load_model == 'True'):
         print("loading model")
         trainer.load_model_from_path(os.path.join(args.experiment, f'cnn_240p_den_{args.modelversion}'))
@@ -279,8 +333,14 @@ if __name__ == '__main__':
                 inputManager.menu(optim=trainer.optim, timeout=10)
                 print("Continuing...")
                 
-            train_loss = trainer.train()
+            train_loss, train_images = trainer.train()
 
-            val_loss = trainer.validate()
+            val_loss, valid_images = trainer.validate()
 
             trainer.loss_plotter.add(epoch, train_loss, val_loss)
+            trainer.image_debugger.add(train_images_noisy=train_images[0],
+                                       train_images_true=train_images[1],
+                                       train_images_predict=train_images[2],
+                                       val_images_noisy=valid_images[0],
+                                       val_images_true=valid_images[1],
+                                       val_images_predict=valid_images[2])
