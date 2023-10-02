@@ -1,4 +1,4 @@
-from .network import CNN_240p_Denoiser, load_model, save_model
+from .networks.network2d import CNN_240p_Denoiser_2d
 from .data import load_data
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -9,102 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from inputimeout import inputimeout, TimeoutOccurred
 from .utils import *
-
-class DebugImagePlotter:
-    def __init__(self, name, num_images, sd_size):
-        
-        self.num_images = 1
-        self.num_cols = 2 + 2
-        plt.ion()
-        self.f, self.axarr = plt.subplots(self.num_images, self.num_cols, figsize=(10*1.775, 10))
-        self.ims = [[None] * self.num_cols]
-        assert len(self.ims) == self.num_images
-        assert len(self.ims[0]) == self.num_cols
-        for x in range(self.num_images):
-            for y in range(self.num_cols):
-                self.ims[x][y] = self.axarr[y].imshow(aspect='auto',X=np.random.random((sd_size[0],sd_size[1], 3)))
-
-        # plt.title(name, fontsize=20)
-        pass
-
-    def add(self, train_images_noisy, train_images_true, train_images_predict,
-            val_images_noisy, val_images_true, val_images_predict):
-        for i in range(self.num_images):
-            self.ims[i][0].set_data(train_images_true[i])
-            self.ims[i][1].set_data(train_images_predict[i])
-            self.ims[i][2].set_data(val_images_true[i])
-            self.ims[i][3].set_data(val_images_predict[i])
-
-        # drawing updated values
-        self.f.canvas.draw()
-    
-        # This will run the GUI event
-        # loop until all UI events
-        # currently waiting have been processed
-        self.f.canvas.flush_events()
-        pass
-
-class LossPlotter:
-    def __init__(self, name, xlabel, ylabel, max_points, line1, line2) -> None:
-        # creating initial data values
-        # of x and y
-        self.x = np.array([])
-        self.y1 = np.sin(self.x)
-        self.y2 = np.sin(self.x)
-
-        self.max_points = max_points
-        
-        plt.ion()
-        # here we are creating sub plots
-        self.figure, self.ax = plt.subplots(figsize=(10, 8))
-        self.line1, = self.ax.plot(self.x, self.y1, label=line1)
-        self.line2, = self.ax.plot(self.x, self.y2, label=line2)
-        self.ax.legend()
-
-        # self.subfigs = self.figure.subfigures(1, 1, wspace=0.07, width_ratios=[1.5, 1.])
-        
-        # self.img_ax1 = self.subfigs.add_subplot(1, 1, 7)
-        
-
-        # setting title
-        plt.title(name, fontsize=20)
-        
-        # setting x-axis label and y-axis label
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        
-    def add(self, _x, _y1, _y2):
-        # to run GUI event loop
-        self.x = np.append(self.x, [_x])
-        self.y1 = np.append(self.y1, [_y1])
-        self.y2 = np.append(self.y2, [_y2])
-        
-        start = len(self.x) - self.max_points
-        self.x = self.x[start:]
-        self.y1 = self.y1[start:]
-        self.y2 = self.y2[start:]
-        self.line1.set_xdata(self.x)
-        self.line1.set_ydata(self.y1)
-
-        self.line2.set_xdata(self.x)
-        self.line2.set_ydata(self.y2)
-
-        # Rescale axes limits
-        self.ax.relim()
-        self.ax.autoscale()
-    
-        self.update_display()
-
-    def update_display(self):
-        # drawing updated values
-        self.figure.canvas.draw()
-    
-        # This will run the GUI event
-        # loop until all UI events
-        # currently waiting have been processed
-        self.figure.canvas.flush_events()
-
-        plt.show()
 
 class DenoisingAutoencoderTrainer:
     def __init__(self) -> None:
@@ -122,16 +26,16 @@ class DenoisingAutoencoderTrainer:
 
     def load_model_from_path(self, path):
         model_name = path
-        self.network = load_model(model_type=CNN_240p_Denoiser, model_name=model_name)
+        self.network = load_model(model_type=CNN_240p_Denoiser_2d, model_name=model_name)
         self.network.to(self.device)
         self.__init_params()
     
     def save_model(self, path):
         model_name = path
-        save_model(self.network, model_type=CNN_240p_Denoiser, model_name=model_name)
+        save_model(self.network, model_type=CNN_240p_Denoiser_2d, model_name=model_name)
 
     def create_new_model(self):
-        self.network = CNN_240p_Denoiser().to(self.device)
+        self.network = CNN_240p_Denoiser_2d().to(self.device)
         self.__init_params()
 
     def release_model(self):
@@ -166,15 +70,22 @@ class DenoisingAutoencoderTrainer:
     def record_imgs(self, tru, pred, step):
         if self.writer:
             assert len(tru.shape) == 4
-            self.writer.add_images(f'{self.tensorboard_name}/Images/lr={self.__get_lr()}/b={self.train_data.batch_size}/length={len(self.train_data.dataset)}', torch.cat((tru, pred), dim=0), step)
+            assert tru.shape == pred.shape
+            final = torch.zeros(tru.shape[0] + pred.shape[0], tru.shape[1], tru.shape[2], tru.shape[3])
+            j = 0
+            for i in range(tru.shape[0]):
+                final[j] = tru[i]
+                final[j+1] = pred[i]
+                j += 2
+            self.writer.add_images(f'{self.tensorboard_name}/Images/lr={self.__get_lr()}/b={self.train_data.batch_size}/length={len(self.train_data.dataset)}', final, step)
         pass
     
     def load_data(self, rootpath):
         self.train_data = load_data(os.path.join(rootpath, 'train'), batch_size=8, 
-                           num_dataset_threads=10, data_count=100)
+                           num_dataset_threads=10, data_count=8000)
         os.system('CLS')
         self.val_data = load_data(os.path.join(rootpath, 'val'), batch_size=8, 
-                            num_dataset_threads=10, data_count=10)
+                            num_dataset_threads=10, data_count=800)
         os.system('CLS')
         pass
 
@@ -251,7 +162,7 @@ class DenoisingAutoencoderTrainer:
                 ground_truth = buffers['converged'].to(self.device)
                 res = self.network(input_tensor)
                 if (i == 0):
-                    debug_images = ground_truth[:5], res[:5]
+                    debug_images = ground_truth[:8], res[:8]
                     pass
                 del input_tensor
                 l = self.loss(res, ground_truth)
@@ -302,8 +213,6 @@ class TrainingMenu:
                 return
         except TimeoutOccurred:
             return
-        
-
 
 
 if __name__ == '__main__':
@@ -365,11 +274,6 @@ if __name__ == '__main__':
             val_loss, valid_images = trainer.validate()
 
             trainer.record_loss(train_loss, val_loss, epoch)
-            trainer.record_imgs(tru=valid_images[0], pred=valid_images[1], step=epoch)
-            # trainer.loss_plotter.add(epoch, train_loss, val_loss)
-            # trainer.image_debugger.add(train_images_noisy=train_images[0],
-            #                            train_images_true=train_images[1],
-            #                            train_images_predict=train_images[2],
-            #                            val_images_noisy=valid_images[0],
-            #                            val_images_true=valid_images[1],
-            #                            val_images_predict=valid_images[2])
+            if (epoch % 5 == 0):
+                trainer.record_imgs(tru=valid_images[0], pred=valid_images[1], step=epoch)
+            

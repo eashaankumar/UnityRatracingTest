@@ -4,7 +4,7 @@ import os
 def next_power_of_2(x):  
     return 1 if x == 0 else 2**(x - 1).bit_length()
 
-class CNN_240p_Denoiser(torch.nn.Module):
+class CNN_240p_Denoiser_2d(torch.nn.Module):
     
     def __init__(self):
         super().__init__()
@@ -71,19 +71,3 @@ class CNN_240p_Denoiser(torch.nn.Module):
         Returns # of channels of output tensor
         """
         return sum(self.output_channels.values())
-    
-
-def save_model(model, model_type, model_name):
-    from torch import save
-    from os import path
-    if isinstance(model, model_type):
-        return save(model.state_dict(), f'{model_name}.th')
-    raise ValueError("model type '%s' not supported!" % str(type(model)))
-
-
-def load_model(model_type, model_name):
-    from torch import load
-    from os import path
-    r = model_type()
-    r.load_state_dict(load(f'{model_name}.th', map_location='cpu'))
-    return r
