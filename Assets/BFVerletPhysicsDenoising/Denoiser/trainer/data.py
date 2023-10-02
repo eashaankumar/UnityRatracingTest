@@ -11,7 +11,7 @@ def load_thread(iter, data, desiredKeys, file_type, trans, dataset_path, data_ra
     data.extend([0] * (len(iter[0])))
     assert (len(data) == len(iter[0]))
     with tqdm(iter[0], f"{iter[1]} {len(data)}") as tepoch:
-        name = dataset_path.split("\\")[-2:]
+        name = dataset_path.split(os.sep)[-2:]
         tepoch.set_description(f"{name[0]}-{name[1]}-{data_range}")
         for i, subdir in enumerate(tepoch):
             subdirPath = os.path.join(dataset_path, subdir)

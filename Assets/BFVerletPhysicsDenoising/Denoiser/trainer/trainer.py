@@ -99,15 +99,15 @@ class Trainer:
         self.network = None
 
     def __init_params(self):
-        self.optim = torch.optim.SGD(self.network.parameters(), 0.02)
-        self.loss = torch.nn.CrossEntropyLoss(reduce='sum')
+        self.optim = torch.optim.Adam(self.network.parameters(), 0.001)
+        self.loss = torch.nn.MSELoss()
 
     def load_data(self, rootpath):
         self.train_data = load_data(os.path.join(rootpath, 'train'), batch_size=8, 
                            num_dataset_threads=7, data_count=8000)
         os.system('CLS')
         self.val_data = load_data(os.path.join(rootpath, 'val'), batch_size=8, 
-                            num_dataset_threads=7, data_count=500)
+                            num_dataset_threads=7, data_count=800)
         os.system('CLS')
         pass
 
@@ -138,7 +138,9 @@ class Trainer:
                     assert input_tensor.shape[2] == out_tensor.shape[2]
                     assert input_tensor.shape[3] == out_tensor.shape[3]
                 res = self.network(input_tensor)
+                del input_tensor
                 l = self.loss(res, ground_truth)
+                del ground_truth
                 self.optim.zero_grad()
                 l.backward()
                 self.optim.step()
@@ -232,16 +234,19 @@ if __name__ == '__main__':
     parser.add_argument("--rootpath", help="path to data root directory", type=str, required=True)
     parser.add_argument("--experiment", help="path to experiment root directory", type=str, required=True)
     parser.add_argument("--modelversion", help="version number to save model as", type=str, required=True)
-    parser.add_argument("--load_model", help="is this model saved and to be loaded from?", type=bool, required=True, default=False)
+    parser.add_argument("--load_model", help="is this model saved and to be loaded from?", type=str, required=True, default='False')
     args = parser.parse_args()
 
     trainer = Trainer()
-    if (args.load_model):
+    if (args.load_model == 'True'):
         print("loading model")
         trainer.load_model_from_path(os.path.join(args.experiment, f'cnn_240p_den_{args.modelversion}'))
-    else:
+    elif (args.load_model == 'False'):
         print("new model")
         trainer.create_new_model()
+
+    else:
+        raise Exception(f"Invalid --load_model arg {args.load_model}")
         
 
     # for name, param in network.named_parameters():
