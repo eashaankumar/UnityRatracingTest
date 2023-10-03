@@ -1,1 +1,0 @@
-python -m trainer.trainer3d --rootpath=C:\Users\seana\Datasets\CNN_240p_Denoiser --experiment=C:\Users\seana\Experiments\CNN_240p_Denoiser --modelversion=v_3D_Adam_MSE_0 --load_model=True --tensorboard=Denoiser_240p_3d_network_small_batch
