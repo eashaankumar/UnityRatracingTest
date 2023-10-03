@@ -530,7 +530,7 @@ MonoBehaviour:
     x: 0
     y: -20
     z: 0
-  simDt: 0.01
+  simDt: 0.00009999999747378752
   subSteps: 5
   cellSize: 3.130000114440918
   count: 0
@@ -793,6 +793,8 @@ MonoBehaviour:
   resolution: 0.5
   text: {fileID: 615847934}
   rayTracingShader: {fileID: 4807578003741378534, guid: 25de828becd32954ba57c3fe01f040cf, type: 3}
+  topColor: {r: 0.32529372, g: 0.73236483, b: 0.8113208, a: 0}
+  bottomColor: {r: 1, g: 1, b: 1, a: 0}
   bounceCountOpaque: 5
   bounceCountTransparent: 8
   mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}

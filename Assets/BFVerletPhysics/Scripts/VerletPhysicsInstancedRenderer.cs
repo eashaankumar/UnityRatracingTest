@@ -23,6 +23,12 @@ namespace BarelyFunctional.Renderer
 
         //public Cubemap envTexture = null;
 
+        [Header("Skybox")]
+        [SerializeField]
+        UnityEngine.Color topColor;
+        [SerializeField]
+        UnityEngine.Color bottomColor;
+
         [Range(1, 100)]
         public uint bounceCountOpaque = 5;
 
@@ -43,7 +49,9 @@ namespace BarelyFunctional.Renderer
         private uint prevBounceCountOpaque = 0;
         private uint prevBounceCountTransparent = 0;
 
-        private RenderTexture rayTracingOutput = null;
+        private RenderTexture noisyRadianceRT = null, convergedRT = null;
+        private RenderTexture normalRT = null, depthRT = null, albedoRT = null, emissionRT = null,
+            specularRT = null, shapeRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
@@ -68,21 +76,34 @@ namespace BarelyFunctional.Renderer
                 rayTracingAccelerationStructure = null;
             }
 
-            if (rayTracingOutput != null)
+            if (noisyRadianceRT != null)
             {
-                rayTracingOutput.Release();
-                rayTracingOutput = null;
+                ReleaseRT(ref noisyRadianceRT);
+                ReleaseRT(ref convergedRT);
+                ReleaseRT(ref normalRT);
+                ReleaseRT(ref depthRT);
+                ReleaseRT(ref albedoRT);
+                ReleaseRT(ref emissionRT);
+                ReleaseRT(ref specularRT);
+                ReleaseRT(ref shapeRT);
             }
 
             cameraWidth = 0;
             cameraHeight = 0;
         }
 
+        void ReleaseRT(ref RenderTexture tex)
+        {
+            tex.Release();
+            tex = null;
+        }
+
         public int PixelWidth
         {
             get
             {
-                return (int)(Camera.main.pixelWidth * resolution);
+                //return (int)(Camera.main.pixelWidth * resolution);
+                return 426;
             }
         }
 
@@ -90,7 +111,8 @@ namespace BarelyFunctional.Renderer
         {
             get
             {
-                return (int)(Camera.main.pixelHeight * resolution);
+                //return (int)(Camera.main.pixelHeight * resolution);
+                return 240;
             }
         }
 
@@ -100,8 +122,17 @@ namespace BarelyFunctional.Renderer
 
             if (cameraWidth != PixelWidth || cameraHeight != PixelHeight)
             {
-                if (rayTracingOutput)
-                    rayTracingOutput.Release();
+                if (noisyRadianceRT)
+                {
+                    ReleaseRT(ref noisyRadianceRT);
+                    ReleaseRT(ref convergedRT);
+                    ReleaseRT(ref normalRT);
+                    ReleaseRT(ref depthRT);
+                    ReleaseRT(ref albedoRT);
+                    ReleaseRT(ref emissionRT);
+                    ReleaseRT(ref specularRT);
+                    ReleaseRT(ref shapeRT);
+                }
 
                 RenderTextureDescriptor rtDesc = new RenderTextureDescriptor()
                 {
@@ -116,8 +147,21 @@ namespace BarelyFunctional.Renderer
                     enableRandomWrite = true,
                 };
 
-                rayTracingOutput = new RenderTexture(rtDesc);
-                rayTracingOutput.Create();
+                CreateRenderTexture(ref noisyRadianceRT, rtDesc);
+
+                CreateRenderTexture(ref convergedRT, rtDesc);
+
+                CreateRenderTexture(ref normalRT, rtDesc);
+
+                CreateRenderTexture(ref albedoRT, rtDesc);
+
+                CreateRenderTexture(ref depthRT, rtDesc);
+
+                CreateRenderTexture(ref emissionRT, rtDesc);
+
+                CreateRenderTexture(ref specularRT, rtDesc);
+
+                CreateRenderTexture(ref shapeRT, rtDesc);
 
                 cameraWidth = (uint)PixelWidth;
                 cameraHeight = (uint)PixelHeight;
@@ -125,6 +169,13 @@ namespace BarelyFunctional.Renderer
                 convergenceStep = 0;
             }
         }
+
+        void CreateRenderTexture(ref RenderTexture tex, RenderTextureDescriptor desc)
+        {
+            tex = new RenderTexture(desc);
+            tex.Create();
+        }
+
 
         void OnDestroy()
         {
@@ -189,7 +240,7 @@ namespace BarelyFunctional.Renderer
             GraphicsBuffer data = null;
             if (vRenderer.standardMaterialData.Length > 0)
             {
-                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.standardMaterialData.Length, 4 * sizeof(float));
+                data = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vRenderer.standardMaterialData.Length, StandardMaterialData.Size);
                 data.SetData(vRenderer.standardMaterialData);
 
                 RayTracingMeshInstanceConfig config = new RayTracingMeshInstanceConfig(mesh, 0, material);
@@ -201,7 +252,7 @@ namespace BarelyFunctional.Renderer
                 rayTracingAccelerationStructure.AddInstances(config, vRenderer.standardMatrices);
 
             }
-            text.text = $"Voxels {vRenderer.standardMaterialData.Length}\n{SystemInfo.graphicsDeviceName}\n{SystemInfo.graphicsDeviceType}\n{rayTracingOutput.width}x{rayTracingOutput.height}";
+            text.text = $"Voxels {vRenderer.standardMaterialData.Length}\n{SystemInfo.graphicsDeviceName}\n{SystemInfo.graphicsDeviceType}\n{noisyRadianceRT.width}x{noisyRadianceRT.height}";
 
             vRenderer.Dispose();
             #endregion
@@ -220,12 +271,24 @@ namespace BarelyFunctional.Renderer
             rayTracingShader.SetFloat(Shader.PropertyToID("g_AspectRatio"), cameraWidth / (float)cameraHeight);
             rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
             rayTracingShader.SetInt(Shader.PropertyToID("g_FrameIndex"), Time.frameCount);
+            rayTracingShader.SetVector(Shader.PropertyToID("g_SkyboxBottomColor"), new Vector3(bottomColor.r, bottomColor.g, bottomColor.b));
+            rayTracingShader.SetVector(Shader.PropertyToID("g_SkyboxTopColor"), new Vector3(topColor.r, topColor.g, topColor.b));
+
             //rayTracingShader.SetTexture(Shader.PropertyToID("g_EnvTex"), envTexture);
 
             // Output
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), rayTracingOutput);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Normal"), normalRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Shape"), shapeRT);
 
-            //for (int i = 0; i < 10; i++)
+            // Output
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
+
+            for (int i = 0; i < 100; i++)
             {
 
                 rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
@@ -236,7 +299,7 @@ namespace BarelyFunctional.Renderer
 
             }
 
-            Graphics.Blit(rayTracingOutput, dest);
+            Graphics.Blit(noisyRadianceRT, dest);
 
 
             prevCameraMatrix = Camera.main.cameraToWorldMatrix;
