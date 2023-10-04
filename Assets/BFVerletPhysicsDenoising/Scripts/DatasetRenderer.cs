@@ -55,23 +55,32 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             [SerializeField]
             public RawImage emissionImage;
             [SerializeField]
-            public RawImage specularImage;
+            public RawImage k_Image;
             [SerializeField]
             public RawImage noisyImage;
             [SerializeField]
             public RawImage convergedImage;
             [SerializeField]
             public RawImage shapeImage;
+            [SerializeField]
+            public RawImage specularImage;
+            [SerializeField]
+            public RawImage extcoMetalImage;
+            [SerializeField]
+            public RawImage roughSmoothImage;
+            [SerializeField]
+            public RawImage iorImage;
         }
 
         [System.Serializable]
         public enum ImageType
         {
-            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL, SHAPE
+            NOISY, CONVERGED, NORMAL, ALBEDO, DEPTH, EMISSION, MATERIAL, SHAPE, SPECULAR, ROUGH_SMOOTH, EXTCO_METAL, IOR
         }
 
         [Header("Ray Tracing")]
         public RayTracingShader rayTracingShader = null;
+        public RayTracingShader rayTracingMetaShader = null;
 
         //public Cubemap envTexture = null;
 
@@ -84,7 +93,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         private RenderTexture noisyRadianceRT = null, convergedRT = null;
         private RenderTexture normalRT = null, depthRT = null, albedoRT = null, emissionRT = null,
-            specularRT = null, shapeRT = null;
+            kRT = null, shapeRT = null, specularRT = null, roughSmoothRT = null, extcoMetalRT = null, iorRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
@@ -122,8 +131,14 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 ReleaseRT(ref depthRT);
                 ReleaseRT(ref albedoRT);
                 ReleaseRT(ref emissionRT);
-                ReleaseRT(ref specularRT);
+                ReleaseRT(ref kRT);
                 ReleaseRT(ref shapeRT);
+
+                ReleaseRT(ref specularRT);
+                ReleaseRT(ref roughSmoothRT);
+                ReleaseRT(ref extcoMetalRT);
+                ReleaseRT(ref iorRT);
+
             }
 
             cameraWidth = 0;
@@ -167,8 +182,13 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     ReleaseRT(ref depthRT);
                     ReleaseRT(ref albedoRT);
                     ReleaseRT(ref emissionRT);
-                    ReleaseRT(ref specularRT);
+                    ReleaseRT(ref kRT);
                     ReleaseRT(ref shapeRT);
+
+                    ReleaseRT(ref specularRT);
+                    ReleaseRT(ref roughSmoothRT);
+                    ReleaseRT(ref extcoMetalRT);
+                    ReleaseRT(ref iorRT);
                 }
 
                 RenderTextureDescriptor rtDesc4Channel = new RenderTextureDescriptor()
@@ -196,9 +216,15 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                 CreateRenderTexture(ref emissionRT, rtDesc4Channel);
 
-                CreateRenderTexture(ref specularRT, rtDesc4Channel);
+                CreateRenderTexture(ref kRT, rtDesc4Channel);
 
                 CreateRenderTexture(ref shapeRT, rtDesc4Channel);
+
+                CreateRenderTexture(ref specularRT, rtDesc4Channel);
+                CreateRenderTexture(ref roughSmoothRT, rtDesc4Channel);
+                CreateRenderTexture(ref extcoMetalRT, rtDesc4Channel);
+                CreateRenderTexture(ref iorRT, rtDesc4Channel);
+
 
                 cameraWidth = (uint)PixelWidth;
                 cameraHeight = (uint)PixelHeight; 
@@ -274,7 +300,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         IEnumerator GenDataSet()
         {
-            if (!SystemInfo.supportsRayTracing || !rayTracingShader)
+            if (!SystemInfo.supportsRayTracing || !rayTracingShader || !rayTracingMetaShader)
             {
                 Debug.Log("The RayTracing API is not supported by this GPU or by the current graphics API.");
                 //Graphics.Blit(src, dest);
@@ -315,22 +341,30 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                 //rayTracingShader.SetTexture(Shader.PropertyToID("g_EnvTex"), envTexture);
 
                 // Output
-                rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Normal"), normalRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
-                rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
+                rayTracingShader.SetTexture(Shader.PropertyToID("g_K"), kRT);
                 rayTracingShader.SetTexture(Shader.PropertyToID("g_Shape"), shapeRT);
 
-                rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
+                // noisy buffer
+                for (int i = 0; i < 10; i++)
+                {
+                    rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
+                    rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
+                    rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
 
-                rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
-
-                convergenceStep++;
+                    convergenceStep++;
+                }
 
                 yield return null;
 
+                MetaShader();
+
+                yield return null; 
+
+                // converged buffer
                 for (int i = 0; i < dataset.Convergence; i++)
                 {
                     rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), convergedRT);
@@ -371,12 +405,28 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                             images.displayImage.texture = emissionRT;
                             break;
                         case ImageType.MATERIAL:
-                            Graphics.Blit(specularRT, main.targetTexture);
-                            images.displayImage.texture = specularRT;
+                            Graphics.Blit(kRT, main.targetTexture);
+                            images.displayImage.texture = kRT;
                             break;
                         case ImageType.SHAPE:
                             Graphics.Blit(shapeRT, main.targetTexture);
                             images.displayImage.texture = shapeRT;
+                            break;
+                        case ImageType.SPECULAR:
+                            Graphics.Blit(specularRT, main.targetTexture);
+                            images.displayImage.texture = specularRT;
+                            break;
+                        case ImageType.ROUGH_SMOOTH:
+                            Graphics.Blit(roughSmoothRT, main.targetTexture);
+                            images.displayImage.texture = roughSmoothRT;
+                            break;
+                        case ImageType.EXTCO_METAL:
+                            Graphics.Blit(extcoMetalRT, main.targetTexture);
+                            images.displayImage.texture = extcoMetalRT;
+                            break;
+                        case ImageType.IOR:
+                            Graphics.Blit(iorRT, main.targetTexture);
+                            images.displayImage.texture = iorRT;
                             break;
                     }
 
@@ -384,14 +434,39 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     images.albedoImage.texture = albedoRT;
                     images.depthImage.texture = depthRT;
                     images.emissionImage.texture = emissionRT;
-                    images.specularImage.texture = specularRT;
+                    images.k_Image.texture = kRT;
                     images.noisyImage.texture = noisyRadianceRT;
                     images.convergedImage.texture = convergedRT;
                     images.shapeImage.texture = shapeRT;
+
+                    images.specularImage.texture = specularRT;
+                    images.roughSmoothImage.texture = roughSmoothRT;
+                    images.extcoMetalImage.texture = extcoMetalRT;
+                    images.iorImage.texture = iorRT;
+
                 }
                 // invoke dataset
-                dataset.AddData((int)sample, ref noisyRadianceRT, ref normalRT, ref depthRT, ref albedoRT, ref shapeRT, ref emissionRT, ref specularRT, ref convergedRT);
+                dataset.AddData((int)sample, ref noisyRadianceRT, ref normalRT, 
+                                ref depthRT, ref albedoRT, ref shapeRT, 
+                                ref emissionRT, ref kRT, ref convergedRT,
+                                ref specularRT, ref roughSmoothRT, ref extcoMetalRT,
+                                ref iorRT);
             }
+        }
+
+        void MetaShader()
+        {
+            rayTracingMetaShader.SetShaderPass("PathTracing");
+            rayTracingMetaShader.SetAccelerationStructure(Shader.PropertyToID("g_AccelStruct"), rayTracingAccelerationStructure);
+            rayTracingMetaShader.SetFloat(Shader.PropertyToID("g_Zoom"), Mathf.Tan(Mathf.Deg2Rad * Camera.main.fieldOfView * 0.5f));
+            rayTracingMetaShader.SetFloat(Shader.PropertyToID("g_AspectRatio"), cameraWidth / (float)cameraHeight);
+            rayTracingMetaShader.SetVector(Shader.PropertyToID("g_SkyboxBottomColor"), new Vector3(bottomColor.r, bottomColor.g, bottomColor.b));
+            rayTracingMetaShader.SetVector(Shader.PropertyToID("g_SkyboxTopColor"), new Vector3(topColor.r, topColor.g, topColor.b));
+            rayTracingMetaShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
+            rayTracingMetaShader.SetTexture(Shader.PropertyToID("g_ExtCoMetal"), extcoMetalRT);
+            rayTracingMetaShader.SetTexture(Shader.PropertyToID("g_RoughSmooth"), roughSmoothRT);
+            rayTracingMetaShader.SetTexture(Shader.PropertyToID("g_IOR"), iorRT);
+            rayTracingMetaShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
         }
 
 

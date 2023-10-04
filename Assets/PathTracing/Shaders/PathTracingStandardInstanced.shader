@@ -158,8 +158,12 @@ Shader "PathTracing/StandardInstanced"
                 payload.meta.normal = worldNormal;
                 payload.meta.albedo = albedo;
                 payload.meta.emission = emission;
-                payload.meta.specular = payload.k;
                 payload.meta.shape = float3(1, 0, 0);
+
+                payload.meta.specular = instanceData.specular;
+                payload.meta.extCoMetal = instanceData.metallic;
+                payload.meta.roughSmooth = instanceData.smoothness;
+                payload.meta.ior = instanceData.ior;
             }
 
             ENDHLSL

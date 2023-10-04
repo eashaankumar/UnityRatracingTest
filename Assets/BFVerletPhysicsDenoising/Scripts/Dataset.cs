@@ -73,7 +73,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
         public void AddData(int id, ref RenderTexture noisy, ref RenderTexture normals, ref RenderTexture depth,
                             ref RenderTexture albedo, ref RenderTexture shape, ref RenderTexture emission,
-                            ref RenderTexture specular, ref RenderTexture converged)
+                            ref RenderTexture k, ref RenderTexture converged, ref RenderTexture specular, 
+                            ref RenderTexture roughSmooth, ref RenderTexture extcoMetal, ref RenderTexture ior)
         {
             string baseFilePath = info.targetFolder + "\\" + id + "\\";
             SaveTexture(ref noisy, baseFilePath, "noisy", id);
@@ -82,8 +83,14 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             SaveTexture(ref albedo, baseFilePath, "albedo", id);
             SaveTexture(ref shape, baseFilePath, "shape", id);
             SaveTexture(ref emission, baseFilePath, "emission", id);
-            SaveTexture(ref specular, baseFilePath, "specular", id);
+            SaveTexture(ref k, baseFilePath, "k", id);
             SaveTexture(ref converged, baseFilePath, "converged", id);
+
+            SaveTexture(ref specular, baseFilePath, "specular", id);
+            SaveTexture(ref roughSmooth, baseFilePath, "roughSmooth", id);
+            SaveTexture(ref extcoMetal, baseFilePath, "extcoMetal", id);
+            SaveTexture(ref ior, baseFilePath, "ior", id);
+
         }
 
         void SaveTexture(ref RenderTexture rt, string baseFilePathSep, string name, int id)

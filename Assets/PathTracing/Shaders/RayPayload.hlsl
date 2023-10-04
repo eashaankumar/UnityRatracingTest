@@ -3,8 +3,12 @@ struct MetaPayload
     float3 normal;
     float3 albedo;
     float3 emission;
-    float3 specular;
     float3 shape;
+
+    float3 specular;
+    float extCoMetal;
+    float roughSmooth;
+    float ior;
 };
 
 struct RayPayload

@@ -1,8 +1,7 @@
 
 #include "UnityShaderVariables.cginc"
 #include "GlobalResources.hlsl"
-#include "Utils.hlsl"
-#include "RayPayload.hlsl"
+#include "RaytracingFuncs.hlsl"
 
 #pragma max_recursion_depth 1
 
@@ -22,9 +21,8 @@ RWTexture2D<float4>             g_Normal;
 RWTexture2D<float4>             g_Albedo;
 RWTexture2D<float4>              g_Depth;
 RWTexture2D<float4>              g_Emission;
-RWTexture2D<float4>              g_Specular;
+RWTexture2D<float4>              g_K;
 RWTexture2D<float4>              g_Shape;
-
 
 [shader("raygeneration")]
 void MainRayGenShader()
@@ -39,10 +37,8 @@ void MainRayGenShader()
     int convergenceStep = g_ConvergenceStep;
     uint rngState = uint(uint(launchIndex.x) * uint(1973) + uint(launchIndex.y) * uint(9277) + uint(convergenceStep + g_FrameIndex) * uint(26699)) | uint(1);
 
-
+    for(int spp = 0; spp < 1; spp++){
         float2 jitter = float2(RandomFloat01(rngState), RandomFloat01(rngState)) - float2(0.5, 0.5);
-
-        //jitter = 0;
 
         float2 ndcCoords = (frameCoord + jitter) / float2(launchDim.x - 1, launchDim.y - 1);
         
@@ -77,8 +73,11 @@ void MainRayGenShader()
         meta.normal                     = float3(0,0,0);
         meta.albedo                     = float3(-1,-1,-1);
         meta.emission                   = float3(0, 0, 0);
-        meta.specular                   = float3(0,0,0);
         meta.shape                      = float3(-1, -1, -1);
+        meta.specular                   = float3(-1,-1,-1);
+        meta.extCoMetal                 = -1;
+        meta.roughSmooth                = -1;
+        meta.ior                        = -1;
         payload.meta                    = meta;
 
         // Safe net for when shaders have compilation errors and don't increase the bounce index, resulting in an infinite loop.
@@ -118,30 +117,32 @@ void MainRayGenShader()
 
         g_Radiance[launchIndex] = float4(lerp(g_Radiance[launchIndex].xyz, radiance, 1 / float(convergenceStep + 1)), 1);
 
-        //convergenceStep++;
-    
+        convergenceStep++;
+    }
 
     //g_Albedo[launchIndex] = g_Albedo[launchIndex] / rays;
     //g_Normal[launchIndex] = g_Normal[launchIndex] / rays;
 
     // meta info
 
-    ndcCoords = (frameCoord) / float2(launchDim.x - 1, launchDim.y - 1);
+    float2 ndcCoords = (frameCoord) / float2(launchDim.x - 1, launchDim.y - 1);
         
     ndcCoords = ndcCoords * 2 - float2(1, 1);
     ndcCoords = ndcCoords * g_Zoom;
 
     // Get a ray in view space.
-    viewDirection = normalize(float3(ndcCoords.x * g_AspectRatio, ndcCoords.y, 1));
+    float3 viewDirection = normalize(float3(ndcCoords.x * g_AspectRatio, ndcCoords.y, 1));
 
     // Rotate the ray from view space to world space.
-    rayDirection = mul((float3x3)unity_CameraToWorld, viewDirection);
+    float3 rayDirection = mul((float3x3)unity_CameraToWorld, viewDirection);
 
+    RayDesc ray;
     ray.Origin      = _WorldSpaceCameraPos;
     ray.Direction   = rayDirection;
     ray.TMin        = 0;
     ray.TMax        = K_T_MAX;
               
+    RayPayload payload;
     payload.albedo                  = float3(1, 1, 1);
     payload.emission                = float3(0, 0, 0);
     payload.rngState                = rngState;
@@ -151,14 +152,18 @@ void MainRayGenShader()
     payload.bounceRayDirection      = float3(0, 0, 0);
     payload.k                       = 1;
         
+    MetaPayload meta;
     meta.normal                     = float3(0,0,0);
     meta.albedo                     = float3(-1,-1,-1);
     meta.emission                   = float3(0, 0, 0);
-    meta.specular                   = float3(0,0,0);
     meta.shape                      = float3(-1, -1, -1);
+    meta.specular                   = float3(-1,-1,-1);
+    meta.extCoMetal                 = -1;
+    meta.roughSmooth                = -1;
+    meta.ior                        = -1;
     payload.meta                    = meta;
 
-    missShaderIndex = 0;
+    uint missShaderIndex = 0;
 
     TraceRay(g_AccelStruct, 0, 0xFF, 0, 1, missShaderIndex, ray, payload);
 
@@ -167,7 +172,7 @@ void MainRayGenShader()
     g_Albedo[launchIndex] = float4(payload.meta.albedo, 1);
     g_Normal[launchIndex] = float4(payload.meta.normal * 0.5 + 0.5, 1);
     g_Emission[launchIndex] = float4(payload.meta.emission, 1);
-    g_Specular[launchIndex] = float4(payload.meta.specular, 1);
+    g_K[launchIndex] = float4(payload.k, payload.k, payload.k, 1);
     g_Shape[launchIndex] = float4(payload.meta.shape, 1);
 }
 
@@ -175,15 +180,5 @@ void MainRayGenShader()
 void MainMissShader0(inout RayPayload payload : SV_RayPayload)
 {
     /*payload.emission                = g_EnvTex.SampleLevel(sampler_g_EnvTex, WorldRayDirection(), 0).xyz;*/
-    float dotProd = dot(WorldRayDirection(), float3(0, 1, 0));
-    float dotProdNorm = dotProd * 0.5 + 0.5;
-    payload.emission = lerp(g_SkyboxBottomColor, g_SkyboxTopColor, dotProdNorm);
-    payload.bounceIndexOpaque       = -1;
-    payload.bounceRayOrigin         = 3.402823466e+38F;
-    payload.albedo = -1;
-    
-    payload.meta.normal = WorldRayDirection();
-    payload.meta.albedo = 0;
-    payload.meta.emission = payload.emission;
-    payload.meta.specular = 0;
+    MainMissShader0(payload, WorldRayDirection(), g_SkyboxBottomColor, g_SkyboxTopColor);
 }

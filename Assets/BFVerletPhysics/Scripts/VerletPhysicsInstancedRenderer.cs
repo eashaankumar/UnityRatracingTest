@@ -51,7 +51,7 @@ namespace BarelyFunctional.Renderer
 
         private RenderTexture noisyRadianceRT = null, convergedRT = null;
         private RenderTexture normalRT = null, depthRT = null, albedoRT = null, emissionRT = null,
-            specularRT = null, shapeRT = null;
+            kRT = null, shapeRT = null;
 
         private RayTracingAccelerationStructure rayTracingAccelerationStructure = null;
 
@@ -84,7 +84,7 @@ namespace BarelyFunctional.Renderer
                 ReleaseRT(ref depthRT);
                 ReleaseRT(ref albedoRT);
                 ReleaseRT(ref emissionRT);
-                ReleaseRT(ref specularRT);
+                ReleaseRT(ref kRT);
                 ReleaseRT(ref shapeRT);
             }
 
@@ -130,7 +130,7 @@ namespace BarelyFunctional.Renderer
                     ReleaseRT(ref depthRT);
                     ReleaseRT(ref albedoRT);
                     ReleaseRT(ref emissionRT);
-                    ReleaseRT(ref specularRT);
+                    ReleaseRT(ref kRT);
                     ReleaseRT(ref shapeRT);
                 }
 
@@ -159,7 +159,7 @@ namespace BarelyFunctional.Renderer
 
                 CreateRenderTexture(ref emissionRT, rtDesc);
 
-                CreateRenderTexture(ref specularRT, rtDesc);
+                CreateRenderTexture(ref kRT, rtDesc);
 
                 CreateRenderTexture(ref shapeRT, rtDesc);
 
@@ -282,13 +282,13 @@ namespace BarelyFunctional.Renderer
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Albedo"), albedoRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Depth"), depthRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Emission"), emissionRT);
-            rayTracingShader.SetTexture(Shader.PropertyToID("g_Specular"), specularRT);
+            rayTracingShader.SetTexture(Shader.PropertyToID("g_K"), kRT);
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Shape"), shapeRT);
 
             // Output
             rayTracingShader.SetTexture(Shader.PropertyToID("g_Radiance"), noisyRadianceRT);
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 10; i++)
             {
 
                 rayTracingShader.SetInt(Shader.PropertyToID("g_ConvergenceStep"), convergenceStep);
