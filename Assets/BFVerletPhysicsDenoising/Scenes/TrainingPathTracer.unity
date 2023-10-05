@@ -3380,7 +3380,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 299383a81b086de43a6b8b85deec57ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  startSample: 0
+  startSample: 18386
   worldGenerator: {fileID: 1399133796}
   dataset: {fileID: 36863695}
   topColor: {r: 0, g: 0.6862745, b: 1, a: 0}

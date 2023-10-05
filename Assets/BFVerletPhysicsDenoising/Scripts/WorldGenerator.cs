@@ -131,7 +131,7 @@ public class WorldGenerator : MonoBehaviour
                             ior = random.NextFloat(1.0f, 2.8f),
                             roughness = random.NextFloat(0f, 0.5f),
                             extinctionCoeff = random.NextFloat(0f, 10f),
-                            flatShading = 0,
+                            flatShading = random.NextBool() ? 1 : 0,
                         },
                         trs= trs
                     }
@@ -146,7 +146,7 @@ public class WorldGenerator : MonoBehaviour
 
         float3 RandSpecular()
         {
-            return new float3(0.5f, 0.5f, 0.5f);
+            return new float3(random.NextFloat(0f, 1f), random.NextFloat(0f, 1f), random.NextFloat(0f, 1f));
         }
     }
 

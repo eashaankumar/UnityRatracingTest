@@ -108,14 +108,17 @@ Shader "PathTracing/StandardGlassInstanced"
 
                 float3 roughness = instanceData.roughness * RandomUnitVector(payload.rngState);
 
-#if _FLAT_SHADING
-                float3 e0 = v1.position - v0.position;
-                float3 e1 = v2.position - v0.position;
+                float3 localNormal = 0;
+                if (instanceData.flatShading)
+                {
+                    float3 e0 = v1.position - v0.position;
+                    float3 e1 = v2.position - v0.position;
 
-                float3 localNormal = normalize(cross(e0, e1));
-#else
-                float3 localNormal = v.normal;
-#endif      
+                    localNormal = normalize(cross(e0, e1));
+                }
+                else {
+                    localNormal = v.normal;
+                }
 
                 float normalSign = isFrontFace ? 1 : -1;
 
