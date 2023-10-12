@@ -297,6 +297,13 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             }
         }
 
+        public void ClearOutRenderTexture(RenderTexture renderTexture)
+        {
+            RenderTexture rt = RenderTexture.active;
+            RenderTexture.active = renderTexture;
+            GL.Clear(true, true, Color.clear);
+            RenderTexture.active = rt;
+        }
 
         IEnumerator GenDataSet()
         {
@@ -318,6 +325,8 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
             }
             for (uint sample = startSample; sample < dataset.Samples; sample++)
             {
+                ClearOutRenderTexture(noisyRadianceRT);
+                ClearOutRenderTexture(convergedRT);
                 this.sample.text = "Sample: " + sample;
                 main.transform.position = (worldGenerator.random.NextFloat3() * 2 - 1) * worldGenerator.SpawnRadius.y + 
                     worldGenerator.random.NextFloat(worldGenerator.SpawnSize.x, worldGenerator.SpawnSize.y);
@@ -356,13 +365,16 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
 
                     convergenceStep++;
+                    yield return null;
                 }
 
                 yield return null;
 
                 MetaShader();
 
-                yield return null; 
+                yield return null;
+
+                Graphics.Blit(noisyRadianceRT, convergedRT); 
 
                 // converged buffer
                 for (int i = 0; i < dataset.Convergence; i++)
@@ -373,8 +385,6 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
 
                     rayTracingShader.Dispatch("MainRayGenShader", (int)cameraWidth, (int)cameraHeight, 1, Camera.main);
                     convergenceStep++;
-
-                    if (i%500 == 0)yield return null;
 
                     convergence.text = $"Convergence: {convergenceStep}";
 
@@ -444,6 +454,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                     images.extcoMetalImage.texture = extcoMetalRT;
                     images.iorImage.texture = iorRT;
 
+                    if (i % 50 == 0) yield return null;
                 }
                 // invoke dataset
                 dataset.AddData((int)sample, ref noisyRadianceRT, ref normalRT, 
@@ -451,6 +462,7 @@ namespace BarelyFunctional.Renderer.Denoiser.DataGeneration
                                 ref emissionRT, ref kRT, ref convergedRT,
                                 ref specularRT, ref roughSmoothRT, ref extcoMetalRT,
                                 ref iorRT);
+                
             }
         }
 

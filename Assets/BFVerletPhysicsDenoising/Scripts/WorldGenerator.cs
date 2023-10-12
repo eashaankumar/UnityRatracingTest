@@ -42,7 +42,7 @@ public class WorldGenerator : MonoBehaviour
         #region assembler
         random = new Unity.Mathematics.Random(seed);
         VerletPhysicsRendererAssembler assembler = new VerletPhysicsRendererAssembler((int)numVoxels, (int)numVoxels, Allocator.TempJob);
-        GenerateWorldJob generateWorldJob = new GenerateWorldJob
+        GenerateWorldJobLinearVoxels generateWorldJob = new GenerateWorldJobLinearVoxels
         {
             standardMaterialAssembly = assembler.standardMaterialAssembly.AsParallelWriter(),
             glassMaterialAssembly = assembler.glassMaterialAssembly.AsParallelWriter(),
@@ -80,6 +80,96 @@ public class WorldGenerator : MonoBehaviour
     }
 
     [BurstCompile]
+    struct GenerateWorldJobLinearVoxels : IJobParallelFor
+    {
+        [NativeDisableParallelForRestriction]
+        public NativeList<StandardVoxelAssembledData>.ParallelWriter standardMaterialAssembly;
+        [NativeDisableParallelForRestriction]
+        public NativeList<GlassVoxelAssembledData>.ParallelWriter glassMaterialAssembly;
+        public Unity.Mathematics.Random random;
+        [ReadOnly]
+        public float2 spawnRadius;
+        [ReadOnly]
+        public float2 spawnSize;
+
+        public void Execute(int index)
+        {
+            float3 pos = (random.NextFloat3() * 2 - 1) * spawnRadius.y;//(posNoise) * random.NextFloat(spawnRadius.x, spawnRadius.y);
+            quaternion rot = random.NextQuaternionRotation();
+            float size = random.NextFloat(spawnSize.x, spawnSize.y);
+            Matrix4x4 trs = Matrix4x4.TRS(pos, rot, new float3(1, 1, 1) * size);
+
+            int3 dim = random.NextInt3(new int3(1, 1, 1), new int3(3, 1, 1));
+
+            AddNewLinearVoxel(trs);
+
+            for (int x = 0; x < dim.x; x++)
+            {
+                for(int y = 0; y < dim.y; y++)
+                {
+                    for (int z = 0; z < dim.z; z++)
+                    {
+                        trs = Matrix4x4.TRS(pos + math.mul(rot, new float3(x, y, z) * size), rot, new float3(1, 1, 1) * size);
+                        AddNewLinearVoxel(trs);
+                    }
+                }
+            }
+        }
+
+        void AddNewLinearVoxel(Matrix4x4 trs)
+        {
+            VoxelMaterialType type = (VoxelMaterialType)random.NextInt(0, 2);
+
+            if (type == VoxelMaterialType.STANDARD)
+            {
+                standardMaterialAssembly.AddNoResize(
+                    new StandardVoxelAssembledData
+                    {
+                        material = new StandardMaterialData
+                        {
+                            albedo = RandColor(),
+                            specular = random.NextBool() ? RandColor() : 0,
+                            emission = random.NextBool() ? RandColor() * random.NextFloat(0f, 1f) : 0,
+                            smoothness = random.NextBool() ? random.NextFloat(0f, 1f) : 0,
+                            metallic = random.NextBool() ? random.NextFloat(0f, 1f) : 0,
+                            ior = random.NextBool() ? random.NextFloat(0f, 1f) : 0
+                        },
+                        trs = trs
+                    }
+                );
+            }
+            else
+            {
+                glassMaterialAssembly.AddNoResize(
+                    new GlassVoxelAssembledData
+                    {
+                        material = new GlassMaterialData
+                        {
+                            albedo = RandColor(),
+                            emission = random.NextBool() ? RandColor() * random.NextFloat(0f, 1f) : 0,
+                            ior = random.NextBool() ? random.NextFloat(1.0f, 2.8f) : 1.0f,
+                            roughness = random.NextBool() ? random.NextFloat(0f, 0.5f) : 0,
+                            extinctionCoeff = random.NextBool() ? random.NextFloat(0f, 10f) : 0,
+                            flatShading = random.NextBool() ? 1 : 0,
+                        },
+                        trs = trs
+                    }
+                );
+            }
+        }
+
+        float3 RandColor(int index)
+        {
+            return new float3(math.sin(index) * 0.5f + 0.5f, math.cos(index) * 0.5f + 0.5f, math.tan(index) * 0.5f + 0.5f);
+        }
+
+        float3 RandColor()
+        {
+            return new float3(random.NextFloat(0f, 1f), random.NextFloat(0f, 1f), random.NextFloat(0f, 1f));
+        }
+    }
+
+    [BurstCompile]
     struct GenerateWorldJob : IJobParallelFor
     {
         [NativeDisableParallelForRestriction]
@@ -110,7 +200,7 @@ public class WorldGenerator : MonoBehaviour
                         {
                             albedo = RandColor(index),
                             specular = RandSpecular(),
-                            emission = RandColor(index) * random.NextFloat(0f, 1f),
+                            emission = 0,//RandColor(index) * random.NextFloat(0f, 1f),
                             smoothness = random.NextFloat(0f, 1f),
                             metallic = random.NextFloat(0f, 1f),
                             ior = random.NextFloat(0f, 1f)
@@ -127,9 +217,9 @@ public class WorldGenerator : MonoBehaviour
                         material= new GlassMaterialData
                         {
                             albedo = RandColor(index),
-                            emission = RandColor(index) * random.NextFloat(0f, 1.1f),
+                            emission = 0,//RandColor(index) * random.NextFloat(0f, 1.1f),
                             ior = random.NextFloat(1.0f, 2.8f),
-                            roughness = random.NextFloat(0f, 0.5f),
+                            roughness = 1,//random.NextFloat(0f, 0.5f),
                             extinctionCoeff = random.NextFloat(0f, 10f),
                             flatShading = random.NextBool() ? 1 : 0,
                         },

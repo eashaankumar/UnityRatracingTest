@@ -150,12 +150,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   info:
-    targetFolder: C:\Users\seana\Datasets\CNN_240_Denoiser\train
+    targetFolder: C:\Users\seana\Datasets\CNN_240p_Denoiser\train
     width: 426
     height: 240
-    datasetName: CNN_240_Denoiser
-    convergence: 2000
-    samples: 20000
+    datasetName: CNN_240p_Denoiser
+    convergence: 5000
+    samples: 45000
     bounceCountOpaque: 2
     bounceCountTransparent: 3
 --- !u!4 &36863696
@@ -2985,10 +2985,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e14f10210687a20458f6238293dbd17e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  seed: 36546446
+  seed: 46
   spawnRadiusMinMax:
     x: 0
-    y: 10
+    y: 20
   spawnSizeMinMax:
     x: 0.1
     y: 0.5
@@ -3380,11 +3380,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 299383a81b086de43a6b8b85deec57ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  startSample: 18386
+  startSample: 31049
   worldGenerator: {fileID: 1399133796}
   dataset: {fileID: 36863695}
-  topColor: {r: 0, g: 0.6862745, b: 1, a: 0}
-  bottomColor: {r: 1, g: 1, b: 1, a: 0}
+  topColor: {r: 0, g: 0, b: 0, a: 0}
+  bottomColor: {r: 0, g: 0, b: 0, a: 0}
   images:
     displayImage: {fileID: 1104418847}
     normalImage: {fileID: 363064965}

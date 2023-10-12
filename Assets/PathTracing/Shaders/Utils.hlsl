@@ -62,3 +62,21 @@ float FresnelReflectAmountTransparent(float n1, float n2, float3 incident, float
     float xx = x*x;
     return r0 + (1.0 - r0)*xx*xx*x;
 }
+
+float invLerp(float from, float to, float value) {
+    return (value - from) / (to - from);
+}
+
+float remap(float origFrom, float origTo, float targetFrom, float targetTo, float value) {
+    float rel = invLerp(origFrom, origTo, value);
+    return lerp(targetFrom, targetTo, rel);
+}
+
+float3 invLerp(float3 from, float3 to, float3 value) {
+    return (value - from) / (to - from);
+}
+
+float3 remap(float3 origFrom, float3 origTo, float3 targetFrom, float3 targetTo, float3 value) {
+    float3 rel = invLerp(origFrom, origTo, value);
+    return lerp(targetFrom, targetTo, rel);
+}
